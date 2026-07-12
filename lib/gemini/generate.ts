@@ -1,5 +1,11 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, createUserContent, createPartFromBase64 } from '@google/genai';
 import { GeminiResponse, normalizeRecipe, stripFence, normalizeEnvelope, type StoredRecipe } from '../schema';
+
+// Приложенный файл (картинка или PDF) в base64.
+export interface Media {
+  mimeType: string;
+  dataB64: string;
+}
 
 // Вызов Gemini с JSON-выводом. Ключ живёт ТОЛЬКО на сервере (env), в браузер
 // не попадает. Вызывать исключительно из серверного кода (route handler).
@@ -38,7 +44,9 @@ const SYSTEM = `Ты — помощник по рецептам. По запро
   ]
 }
 Правила:
-- Если в запросе есть ссылка (URL) — открой её и пересказывай рецепт именно с этой страницы, ничего не выдумывай. Если открыть не удалось — так и скажи в title.
+- Если приложен файл (фото, скриншот, скан, PDF, текст) — извлеки рецепт(ы) из него, ничего не выдумывая.
+- Если в запросе есть ссылка (URL) — открой её и пересказывай рецепт именно с этой страницы, ничего не выдумывай.
+- Если источник (ссылку или файл) прочитать не удалось — верни recipes: [] (пустой массив), НЕ выдумывай рецепт и НЕ создавай заглушку.
 - amount оставляй как в рецепте ("50–70 г", "по вкусу", "2 зубчика") — НЕ переводи единицы.
 - В uses[].ingredient пиши ИМЯ ровно так, как в groups, чтобы можно было сматчить.
 - Для КАЖДОГО ингредиента в uses указывай amount — количество, идущее на этом шаге (по умолчанию столько же, сколько в groups). Не оставляй amount пустым без причины; если ингредиент уже частично ушёл в прошлом шаге — ставь note "оставшееся".
@@ -71,11 +79,20 @@ export interface GenerateResult {
   error?: string;
 }
 
-export async function generateRecipes(userPrompt: string): Promise<GenerateResult> {
+const SOURCE_FAIL =
+  'Не удалось извлечь рецепт из источника. Instagram/TikTok блокируют доступ по ссылке — ' +
+  'вставь текст описания или загрузи скриншот/файл.';
+
+export async function generateRecipes(userPrompt: string, media?: Media): Promise<GenerateResult> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, recipes: [], error: 'GEMINI_API_KEY не задан' };
 
   const ai = new GoogleGenAI({ apiKey: key });
+
+  // С файлом — мультимодальный запрос (картинка/PDF + текст), иначе просто текст.
+  const contents = media
+    ? createUserContent([createPartFromBase64(media.dataB64, media.mimeType), userPrompt])
+    : userPrompt;
 
   let text: string | undefined;
   let finishReason: string | undefined;
@@ -83,7 +100,7 @@ export async function generateRecipes(userPrompt: string): Promise<GenerateResul
     const res = await withRetry(() =>
       ai.models.generateContent({
         model: MODEL,
-        contents: userPrompt,
+        contents,
         config: {
           systemInstruction: SYSTEM,
           responseMimeType: 'application/json',
@@ -125,11 +142,33 @@ export async function generateRecipes(userPrompt: string): Promise<GenerateResul
   }
 
   // Нормализуем обёртку (массив / голый объект / {recipes}) перед валидацией.
-  const parsed = GeminiResponse.safeParse(normalizeEnvelope(json));
+  const enveloped = normalizeEnvelope(json);
+
+  // Модель вернула пустой список -> источник не прочитан (Instagram, кривое фото).
+  if (
+    enveloped &&
+    typeof enveloped === 'object' &&
+    Array.isArray((enveloped as { recipes?: unknown }).recipes) &&
+    (enveloped as { recipes: unknown[] }).recipes.length === 0
+  ) {
+    return { ok: false, recipes: [], error: SOURCE_FAIL };
+  }
+
+  const parsed = GeminiResponse.safeParse(enveloped);
   if (!parsed.success) {
     console.error('Gemini zod issues:', parsed.error.issues.slice(0, 5));
     return { ok: false, recipes: [], raw: text, error: 'Структура ответа не прошла валидацию' };
   }
 
-  return { ok: true, recipes: parsed.data.recipes.map(normalizeRecipe) };
+  const recipes = parsed.data.recipes.map(normalizeRecipe);
+
+  // Рецепты есть, но все пустые (нет ни ингредиентов, ни шагов) -> заглушка.
+  const allEmpty = recipes.every(
+    (r) => r.steps.length === 0 && r.groups.every((g) => g.items.length === 0),
+  );
+  if (allEmpty) {
+    return { ok: false, recipes: [], error: SOURCE_FAIL };
+  }
+
+  return { ok: true, recipes };
 }
