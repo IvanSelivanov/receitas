@@ -2,7 +2,24 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { formatQuantity } from '@/lib/recipe/scale';
+import { parseVoiceCommand, type VoiceCommand } from '@/lib/voice';
 import type { StoredStep } from '@/lib/schema';
+
+// Минимальные типы Web Speech API (не всегда есть в lib.dom).
+interface SREvent {
+  results: { length: number; [i: number]: { 0: { transcript: string } } };
+}
+interface SRInstance {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((e: SREvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type SRCtor = new () => SRInstance;
 
 function mmss(totalSec: number): string {
   const m = Math.floor(totalSec / 60);
@@ -53,8 +70,64 @@ export function CookMode({
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState('');
+  const [listening, setListening] = useState(false);
+  const [heard, setHeard] = useState('');
   const firedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
+  const recognitionRef = useRef<SRInstance | null>(null);
+  const listeningRef = useRef(false);
+  const dispatchRef = useRef<(c: VoiceCommand) => void>(() => {});
+
+  function toggleListening() {
+    if (listeningRef.current) {
+      listeningRef.current = false;
+      setListening(false);
+      setHeard('');
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const w = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) {
+      setHeard('Распознавание речи не поддерживается в этом браузере');
+      return;
+    }
+    const rec = new Ctor();
+    rec.lang = 'ru-RU';
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const last = e.results[e.results.length - 1];
+      const text = last?.[0]?.transcript ?? '';
+      setHeard(text);
+      const cmd = parseVoiceCommand(text);
+      if (cmd) dispatchRef.current(cmd);
+    };
+    rec.onend = () => {
+      // Web Speech сам останавливается после паузы — перезапускаем, пока включено.
+      if (listeningRef.current) {
+        try {
+          rec.start();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    rec.onerror = () => {};
+    recognitionRef.current = rec;
+    listeningRef.current = true;
+    setListening(true);
+    setHeard('Слушаю…');
+    try {
+      rec.start();
+    } catch {
+      /* ignore */
+    }
+  }
 
   function speak(text: string, uri = voiceURI) {
     const synth = window.speechSynthesis;
@@ -85,8 +158,19 @@ export function CookMode({
     if (autoSpeak) readStep(steps[idx]);
   }
 
-  // Останавливаем речь при выходе.
-  useEffect(() => () => window.speechSynthesis?.cancel(), []);
+  // Останавливаем речь и распознавание при выходе.
+  useEffect(
+    () => () => {
+      window.speechSynthesis?.cancel();
+      listeningRef.current = false;
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
 
   // Список голосов грузится асинхронно (иногда с задержкой). Показываем ВСЕ
   // доступные голоса, русские — первыми.
@@ -227,6 +311,30 @@ export function CookMode({
   const total = steps.length;
   const progress = total > 0 ? ((i + 1) / total) * 100 : 0;
 
+  // Диспетчер голосовых команд (обновляем каждый рендер, чтобы видеть свежие i/step).
+  dispatchRef.current = (cmd: VoiceCommand) => {
+    switch (cmd.type) {
+      case 'next':
+        go(i + 1);
+        break;
+      case 'prev':
+        go(i - 1);
+        break;
+      case 'read':
+        readStep(step);
+        break;
+      case 'timer':
+        startTimer(cmd.minutes, `${step.label || `Шаг ${i + 1}`}: ${cmd.minutes} мин`);
+        break;
+      case 'stopTimer':
+        setTimer(null);
+        break;
+      case 'exit':
+        onExit();
+        break;
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-neutral-950">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -234,6 +342,14 @@ export function CookMode({
         <span className="shrink-0 text-sm tabular-nums text-neutral-500">
           Шаг {i + 1} / {total}
         </span>
+        <button
+          onClick={toggleListening}
+          aria-label="Голосовые команды"
+          title="Голосовые команды"
+          className={`shrink-0 text-base ${listening ? 'animate-pulse' : 'opacity-40'}`}
+        >
+          🎤
+        </button>
         <button
           onClick={() => {
             const next = !autoSpeak;
@@ -254,6 +370,12 @@ export function CookMode({
       <div className="h-1 bg-neutral-100 dark:bg-neutral-900">
         <div className="h-full bg-neutral-900 transition-all dark:bg-white" style={{ width: `${progress}%` }} />
       </div>
+
+      {heard && (
+        <div className="bg-neutral-100 px-4 py-1.5 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+          {listening ? `🎤 ${heard} · «дальше» · «назад» · «повтори» · «таймер N минут» · «стоп»` : heard}
+        </div>
+      )}
 
       {timer && (
         <div
@@ -304,7 +426,7 @@ export function CookMode({
           <button onClick={() => readStep(step)} className="text-sm text-neutral-500 hover:underline">
             🔊 Прочитать шаг
           </button>
-          {voices.length > 0 && (
+          {voices.length > 1 && (
             <select
               value={voiceURI}
               onChange={(e) => selectVoice(e.target.value)}
