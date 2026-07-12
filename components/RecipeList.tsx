@@ -106,16 +106,19 @@ export function RecipeList({
   return (
     <>
       {categories.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
-          <Chip active={activeCat === null} onClick={() => setActiveCat(null)}>
-            Все
-          </Chip>
-          {categories.map((c) => (
-            <Chip key={c.id} active={activeCat === c.id} onClick={() => setActiveCat(c.id)}>
-              {c.name}
+        <div className="mb-4 flex items-center gap-2">
+          {/* Горизонтальная прокрутка внутри полосы: чипы не растягивают страницу. */}
+          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Chip active={activeCat === null} onClick={() => setActiveCat(null)}>
+              Все
             </Chip>
-          ))}
-          <Link href="/categories" className="ml-auto text-sm text-neutral-500 hover:underline">
+            {categories.map((c) => (
+              <Chip key={c.id} active={activeCat === c.id} onClick={() => setActiveCat(c.id)}>
+                {c.name}
+              </Chip>
+            ))}
+          </div>
+          <Link href="/categories" className="shrink-0 text-sm text-neutral-500 hover:underline">
             Категории
           </Link>
         </div>
@@ -227,7 +230,7 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full px-3 py-1 text-sm transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
         active
           ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
           : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
