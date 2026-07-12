@@ -62,6 +62,7 @@ export function CookMode({
   const [i, setI] = useState(0);
   const [timer, setTimer] = useState<{ endAt: number; label: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [extendMin, setExtendMin] = useState('');
   const firedRef = useRef(false);
 
   const remaining = timer ? Math.max(0, Math.round((timer.endAt - now) / 1000)) : 0;
@@ -108,6 +109,14 @@ export function CookMode({
     setTimer({ endAt: Date.now() + minutes * 60_000, label });
   }
 
+  // Продлить закончившийся таймер на введённое число минут (с текущего момента).
+  function extend() {
+    const m = parseFloat(extendMin.replace(',', '.'));
+    if (!timer || !Number.isFinite(m) || m <= 0) return;
+    startTimer(m, timer.label);
+    setExtendMin('');
+  }
+
   const step = steps[i];
   const total = steps.length;
   const progress = total > 0 ? ((i + 1) / total) * 100 : 0;
@@ -129,17 +138,43 @@ export function CookMode({
 
       {timer && (
         <div
-          className={`flex items-center justify-between px-4 py-2.5 ${
+          className={`flex items-center gap-3 px-4 py-2.5 ${
             remaining === 0 ? 'bg-green-600 text-white' : 'bg-neutral-100 dark:bg-neutral-900'
           }`}
         >
           <span className="min-w-0 flex-1 truncate text-sm">{timer.label}</span>
-          <span className="shrink-0 text-lg font-semibold tabular-nums">
-            {remaining === 0 ? 'Готово!' : mmss(remaining)}
-          </span>
-          <button onClick={() => setTimer(null)} className="ml-3 shrink-0 text-sm underline">
-            стоп
-          </button>
+          {remaining === 0 ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="font-semibold">Готово!</span>
+              <input
+                inputMode="decimal"
+                value={extendMin}
+                onChange={(e) => setExtendMin(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') extend();
+                }}
+                placeholder="мин"
+                className="w-14 rounded border-0 bg-white px-2 py-1 text-center text-sm text-neutral-900 outline-none"
+              />
+              <button
+                onClick={extend}
+                disabled={!extendMin.trim()}
+                className="rounded bg-white/25 px-2 py-1 text-sm font-medium disabled:opacity-50"
+              >
+                + продлить
+              </button>
+              <button onClick={() => setTimer(null)} className="text-sm underline">
+                закрыть
+              </button>
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-3">
+              <span className="text-lg font-semibold tabular-nums">{mmss(remaining)}</span>
+              <button onClick={() => setTimer(null)} className="text-sm underline">
+                стоп
+              </button>
+            </div>
+          )}
         </div>
       )}
 
