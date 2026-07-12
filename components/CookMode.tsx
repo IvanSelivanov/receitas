@@ -10,7 +10,8 @@ function mmss(totalSec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// Короткий сигнал + вибрация по окончании таймера.
+// Сигнал по окончании таймера: три коротких бипа + вибрация. Заметнее одного
+// бипа, но не назойливо (не зацикливаем).
 function alertDone() {
   try {
     const Ctx =
@@ -18,22 +19,28 @@ function alertDone() {
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (Ctx) {
       const ctx = new Ctx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.6);
-      setTimeout(() => ctx.close(), 900);
+      // Три бипа со сдвигом; мягкая атака/затухание, чтобы не щёлкало.
+      for (const offset of [0, 0.35, 0.7]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        const start = ctx.currentTime + offset;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.3, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
+        osc.start(start);
+        osc.stop(start + 0.26);
+      }
+      setTimeout(() => ctx.close(), 1300);
     }
   } catch {
     /* звук не критичен */
   }
   try {
-    navigator.vibrate?.([200, 100, 200]);
+    navigator.vibrate?.([300, 150, 300, 150, 300]);
   } catch {
     /* ignore */
   }
