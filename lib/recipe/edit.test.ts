@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toEditGroups, buildEditedRecipe } from './edit';
-import { normalizeRecipe, type TGeminiRecipe } from '../schema';
+import { normalizeRecipe, type TGeminiRecipe, type StoredStep } from '../schema';
 
 const base = normalizeRecipe({
   title: 'Утка',
@@ -67,6 +67,20 @@ describe('buildEditedRecipe', () => {
     const out = buildEditedRecipe(eg, base.steps);
     expect(out.groups[0].items.map((i) => i.name)).toEqual(['Мёд']);
     expect(out.steps[0].uses.map((u) => u.ingredientName)).toEqual(['Мёд']);
+  });
+
+  it('добавленный на шаг ингредиент (ref/кол-во null) резолвится из мастера', () => {
+    const eg = toEditGroups(base.groups);
+    eg[0].items.push({ id: 'wine', name: 'Белое вино', amount: '2 ст. л.' });
+    // как делает пикер в редакторе: use только с именем
+    const steps: StoredStep[] = base.steps.map((s) => ({
+      ...s,
+      uses: [...s.uses, { ref: null, ingredientName: 'Белое вино', quantity: null, note: null }],
+    }));
+    const out = buildEditedRecipe(eg, steps);
+    const wineUse = out.steps[0].uses.find((u) => u.ingredientName === 'Белое вино')!;
+    expect(wineUse.ref).toBe('wine');
+    expect(wineUse.quantity).toMatchObject({ kind: 'number', value: 2, unit: 'ст. л.' });
   });
 
   it('пустые ингредиенты и шаги отбрасываются', () => {

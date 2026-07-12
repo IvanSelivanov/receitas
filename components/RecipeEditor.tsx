@@ -11,6 +11,8 @@ import type { StoredStep } from '@/lib/schema';
 const newId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `new-${Date.now()}-${Math.random()}`;
 
+const norm = (s: string) => s.trim().toLowerCase();
+
 const inputCls =
   'rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950';
 
@@ -58,6 +60,31 @@ export function RecipeEditor({ recipe }: { recipe: RecipeRecord }) {
   function removeStep(si: number) {
     setSteps((prev) => prev.filter((_, i) => i !== si));
   }
+
+  // Включить/выключить ингредиент на шаге. ref/количество проставит
+  // buildEditedRecipe из мастер-списка по имени при сохранении.
+  function toggleStepIngredient(si: number, name: string) {
+    setSteps((prev) =>
+      prev.map((s, i) => {
+        if (i !== si) return s;
+        const has = s.uses.some((u) => norm(u.ingredientName) === norm(name));
+        const uses = has
+          ? s.uses.filter((u) => norm(u.ingredientName) !== norm(name))
+          : [...s.uses, { ref: null, ingredientName: name, quantity: null, note: null }];
+        return { ...s, uses };
+      }),
+    );
+  }
+
+  // Уникальные имена ингредиентов из (редактируемого) мастер-списка.
+  const ingredientNames = [
+    ...new Map(
+      groups
+        .flatMap((g) => g.items)
+        .filter((it) => it.name.trim())
+        .map((it) => [norm(it.name), it.name.trim()] as const),
+    ).values(),
+  ];
 
   async function save() {
     setSaving(true);
@@ -158,6 +185,30 @@ export function RecipeEditor({ recipe }: { recipe: RecipeRecord }) {
                   placeholder="Что делать"
                   className={inputCls}
                 />
+                {ingredientNames.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-xs text-neutral-400">Ингредиенты на этом шаге:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ingredientNames.map((name) => {
+                        const on = s.uses.some((u) => norm(u.ingredientName) === norm(name));
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => toggleStepIngredient(si, name)}
+                            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                              on
+                                ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                                : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
+                            }`}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => removeStep(si)}
