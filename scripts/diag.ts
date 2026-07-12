@@ -1,20 +1,9 @@
-// Проверка детекта нечитаемого источника + отсутствия регрессии.
-//   node --env-file=.env.local --import tsx scripts/diag.ts
 import { generateRecipes } from '../lib/gemini/generate';
 
 async function main() {
-  const ig = await generateRecipes(
-    'можешь пересказать рецепт салата из инстаграм рилса? https://www.instagram.com/reel/DQaI3NTgAuI/',
-  );
-  console.log(
-    `[Instagram] ok=${ig.ok}`,
-    ig.ok ? `(⚠ ожидали ошибку!) рецептов ${ig.recipes.length}` : `-> "${ig.error}"`,
-  );
-
-  const normal = await generateRecipes('Простой рецепт омлета');
-  console.log(
-    `[обычный] ok=${normal.ok}`,
-    normal.ok ? `-> "${normal.recipes[0].title}"` : `(⚠ регрессия) ${normal.error}`,
-  );
+  const r = await generateRecipes('как варить рис');
+  console.log(`[обычный] ok=${r.ok}`, r.ok ? `"${r.recipes[0].title}"` : r.error);
+  const u = await generateRecipes('Сходи по ссылке https://www.iamcook.ru/showrecipe/9474 и перескажи');
+  console.log(`[по ссылке] ok=${u.ok}`, u.ok ? `"${u.recipes[0].title}"` : u.error);
 }
 main().catch((e) => console.error(e));

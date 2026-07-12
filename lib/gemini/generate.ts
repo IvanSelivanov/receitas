@@ -94,6 +94,10 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
     ? createUserContent([createPartFromBase64(media.dataB64, media.mimeType), userPrompt])
     : userPrompt;
 
+  // urlContext включаем ТОЛЬКО при наличии ссылки в запросе. Иначе тул иногда
+  // сам тянет контент (десятки тысяч токенов) и модель отдаёт пустой ответ.
+  const hasUrl = /https?:\/\/\S+/i.test(userPrompt);
+
   let text: string | undefined;
   let finishReason: string | undefined;
   let blockReason: string | undefined;
@@ -105,9 +109,8 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
         config: {
           systemInstruction: SYSTEM,
           responseMimeType: 'application/json',
-          // URL context: даёт модели читать ссылки из запроса (иначе она их не
-          // видит и выдумывает рецепт). Бездействует, когда ссылки нет.
-          tools: [{ urlContext: {} }],
+          // URL context — только когда в запросе есть ссылка (см. hasUrl выше).
+          ...(hasUrl ? { tools: [{ urlContext: {} }] } : {}),
           // Размышления (thinking) плавают по длине и съедают бюджет вывода —
           // это причина случайной обрезки JSON. Для структурной генерации они
           // не нужны: выключаем и отдаём весь бюджет ответу.
