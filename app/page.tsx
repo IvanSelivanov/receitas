@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { listRecipes } from '@/lib/recipe/db';
+import { listCategories, getRecipeCategoryLinks, type Category } from '@/lib/recipe/categories';
 import { RecipeList } from '@/components/RecipeList';
 
 export default async function Home() {
@@ -12,6 +13,18 @@ export default async function Home() {
   if (!user) redirect('/login');
 
   const recipes = await listRecipes(supabase);
+  // Категории необязательны: если SQL ещё не применён (нет таблиц) — не роняем
+  // страницу, просто не показываем фильтр.
+  let categories: Category[] = [];
+  let links: Record<string, string[]> = {};
+  try {
+    [categories, links] = await Promise.all([
+      listCategories(supabase),
+      getRecipeCategoryLinks(supabase),
+    ]);
+  } catch {
+    /* categories not set up yet */
+  }
 
   async function signOut() {
     'use server';
@@ -47,7 +60,7 @@ export default async function Home() {
           </Link>
         </div>
       ) : (
-        <RecipeList recipes={recipes} />
+        <RecipeList recipes={recipes} categories={categories} links={links} />
       )}
     </main>
   );
