@@ -1,14 +1,38 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ShoppingItem } from '@/lib/recipe/shoppingList';
 
-// Список покупок с отметкой купленного (локально, зачёркивание).
-export function ShoppingListView({ items }: { items: ShoppingItem[] }) {
+// Список покупок с отметкой купленного. Купленные уезжают в конец. Если задан
+// storageKey — отметки сохраняются в localStorage (переживают перезагрузку,
+// в т.ч. офлайн).
+export function ShoppingListView({
+  items,
+  storageKey,
+}: {
+  items: ShoppingItem[];
+  storageKey?: string;
+}) {
   const [bought, setBought] = useState<Set<string>>(new Set());
 
-  if (items.length === 0) {
-    return <p className="text-neutral-500">Пусто.</p>;
+  // Загружаем сохранённые отметки после монтирования (без SSR-рассинхрона).
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const raw = localStorage.getItem(`${storageKey}:bought`);
+      if (raw) setBought(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, [storageKey]);
+
+  function persist(next: Set<string>) {
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(`${storageKey}:bought`, JSON.stringify([...next]));
+    } catch {
+      /* ignore */
+    }
   }
 
   function toggle(name: string) {
@@ -16,12 +40,21 @@ export function ShoppingListView({ items }: { items: ShoppingItem[] }) {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
+      persist(next);
       return next;
     });
   }
 
-  // Купленные уезжают в конец. Sort стабильный -> внутри каждой группы порядок
-  // (алфавитный из buildShoppingList) сохраняется.
+  function clearAll() {
+    setBought(new Set());
+    persist(new Set());
+  }
+
+  if (items.length === 0) {
+    return <p className="text-neutral-500">Пусто.</p>;
+  }
+
+  // Купленные уезжают в конец. Sort стабильный -> порядок внутри групп сохраняется.
   const ordered = [...items].sort(
     (a, b) => (bought.has(a.name) ? 1 : 0) - (bought.has(b.name) ? 1 : 0),
   );
@@ -54,10 +87,7 @@ export function ShoppingListView({ items }: { items: ShoppingItem[] }) {
         })}
       </ul>
       {bought.size > 0 && (
-        <button
-          onClick={() => setBought(new Set())}
-          className="self-start text-sm text-neutral-500 hover:underline"
-        >
+        <button onClick={clearAll} className="self-start text-sm text-neutral-500 hover:underline">
           Снять отметки
         </button>
       )}

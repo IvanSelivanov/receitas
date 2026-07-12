@@ -2,12 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { RecipeListItem } from '@/lib/recipe/db';
 
 // Список рецептов с выбором нескольких для списка покупок.
 export function RecipeList({ recipes }: { recipes: RecipeListItem[] }) {
-  const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {
@@ -43,12 +41,14 @@ export function RecipeList({ recipes }: { recipes: RecipeListItem[] }) {
 
       {selected.size > 0 && (
         <div className="fixed inset-x-0 bottom-0 flex justify-center p-4">
-          <button
-            onClick={() => router.push(`/shopping?ids=${[...selected].join(',')}`)}
+          {/* Полный переход (не client-nav): чтобы service worker закэшировал
+              документ /shopping и отдавал его офлайн. */}
+          <a
+            href={`/shopping?ids=${[...selected].join(',')}`}
             className="rounded-full bg-neutral-900 px-5 py-3 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-neutral-900"
           >
             Список покупок ({selected.size})
-          </button>
+          </a>
         </div>
       )}
     </>
