@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { listRecipes } from '@/lib/recipe/db';
+import { RecipeList } from '@/components/RecipeList';
 
 export default async function Home() {
   const supabase = await createClient();
@@ -46,18 +47,7 @@ export default async function Home() {
           </Link>
         </div>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {recipes.map((r) => (
-            <li key={r.id}>
-              <Link
-                href={`/recipe/${r.id}`}
-                className="block rounded-lg border border-neutral-200 p-4 transition-colors hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
-              >
-                <span className="font-medium">{r.title}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <RecipeList recipes={recipes} />
       )}
     </main>
   );

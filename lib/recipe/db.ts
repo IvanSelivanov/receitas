@@ -63,6 +63,14 @@ export async function getRecipe(sb: SupabaseClient, id: string): Promise<RecipeR
   return data ? rowToRecord(data as Row) : null;
 }
 
+/** Несколько рецептов по id (для списка покупок). RLS отдаёт только свои. */
+export async function getRecipesByIds(sb: SupabaseClient, ids: string[]): Promise<RecipeRecord[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await sb.from('recipes').select('*').in('id', ids);
+  if (error) throw error;
+  return (data ?? []).map((row) => rowToRecord(row as Row));
+}
+
 /** Сохраняет выбранные рецепты текущего пользователя. Возвращает id новых строк. */
 export async function saveRecipes(
   sb: SupabaseClient,
