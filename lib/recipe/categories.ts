@@ -53,6 +53,20 @@ export async function assignCategory(
   if (error) throw error;
 }
 
+/** Назначает категорию сразу нескольким рецептам (дубли игнорируются). */
+export async function assignCategoryToRecipes(
+  sb: SupabaseClient,
+  recipeIds: string[],
+  categoryId: string,
+): Promise<void> {
+  if (recipeIds.length === 0) return;
+  const rows = recipeIds.map((rid) => ({ recipe_id: rid, category_id: categoryId }));
+  const { error } = await sb
+    .from('recipe_categories')
+    .upsert(rows, { onConflict: 'recipe_id,category_id', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
 export async function unassignCategory(
   sb: SupabaseClient,
   recipeId: string,
