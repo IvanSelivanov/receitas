@@ -51,16 +51,29 @@ export function CookMode({
   const [now, setNow] = useState(() => Date.now());
   const [extendMin, setExtendMin] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceURI, setVoiceURI] = useState('');
   const firedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
 
-  function speak(text: string) {
+  function speak(text: string, uri = voiceURI) {
     const synth = window.speechSynthesis;
     if (!synth || !text) return;
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ru-RU';
+    const v = synth.getVoices().find((x) => x.voiceURI === uri);
+    if (v) u.voice = v;
     synth.speak(u);
+  }
+  function selectVoice(uri: string) {
+    setVoiceURI(uri);
+    try {
+      localStorage.setItem('tts-voice', uri);
+    } catch {
+      /* ignore */
+    }
+    speak('Пример голоса', uri); // образец сразу новым голосом
   }
   function readStep(step: StoredStep) {
     speak([step.label, step.text].filter(Boolean).join('. '));
@@ -74,6 +87,26 @@ export function CookMode({
 
   // Останавливаем речь при выходе.
   useEffect(() => () => window.speechSynthesis?.cancel(), []);
+
+  // Список голосов грузится асинхронно; подхватываем русские + сохранённый выбор.
+  useEffect(() => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    const load = () => {
+      const all = synth.getVoices();
+      const ru = all.filter((v) => v.lang.toLowerCase().startsWith('ru'));
+      setVoices(ru.length ? ru : all);
+    };
+    load();
+    synth.addEventListener?.('voiceschanged', load);
+    try {
+      const saved = localStorage.getItem('tts-voice');
+      if (saved) setVoiceURI(saved);
+    } catch {
+      /* ignore */
+    }
+    return () => synth.removeEventListener?.('voiceschanged', load);
+  }, []);
 
   function ensureAudio(): AudioContext | null {
     if (!audioRef.current) {
@@ -257,12 +290,26 @@ export function CookMode({
       <div className="flex-1 overflow-y-auto px-6 py-8">
         {step.label && <p className="mb-2 text-lg font-semibold text-neutral-500">{step.label}</p>}
         <p className="text-2xl leading-relaxed">{step.text}</p>
-        <button
-          onClick={() => readStep(step)}
-          className="mt-3 text-sm text-neutral-500 hover:underline"
-        >
-          🔊 Прочитать шаг
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button onClick={() => readStep(step)} className="text-sm text-neutral-500 hover:underline">
+            🔊 Прочитать шаг
+          </button>
+          {voices.length > 1 && (
+            <select
+              value={voiceURI}
+              onChange={(e) => selectVoice(e.target.value)}
+              aria-label="Голос озвучки"
+              className="rounded-lg border border-neutral-300 bg-transparent px-2 py-1 text-sm text-neutral-600 outline-none dark:border-neutral-700 dark:text-neutral-300"
+            >
+              <option value="">Голос по умолчанию</option>
+              {voices.map((v) => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
 
         {step.uses.length > 0 && (
           <div className="mt-6 flex flex-wrap gap-2">
