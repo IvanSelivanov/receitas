@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { formatQuantity } from '@/lib/recipe/scale';
-import { parseVoiceCommand, type VoiceCommand } from '@/lib/voice';
-import type { StoredStep, StoredGroup } from '@/lib/schema';
+import { parseVoiceCommand, speakableQuantity, expandForSpeech, type VoiceCommand } from '@/lib/voice';
+import type { StoredStep } from '@/lib/schema';
 
 // Минимальные типы Web Speech API (не всегда есть в lib.dom).
 interface SREvent {
@@ -56,12 +56,10 @@ type WakeNavigator = Navigator & { wakeLock?: { request: (t: 'screen') => Promis
 // Полноэкранный пошаговый режим готовки.
 export function CookMode({
   steps,
-  groups,
   title,
   onExit,
 }: {
   steps: StoredStep[];
-  groups: StoredGroup[];
   title: string;
   onExit: () => void;
 }) {
@@ -177,15 +175,16 @@ export function CookMode({
     speak('Пример голоса', uri); // образец сразу новым голосом
   }
   function readStep(step: StoredStep) {
-    speak([step.label, step.text].filter(Boolean).join('. '));
+    speak(expandForSpeech([step.label, step.text].filter(Boolean).join('. ')));
   }
-  function readIngredients() {
-    const parts: string[] = [];
-    for (const g of groups) {
-      if (g.name) parts.push(`${g.name}.`);
-      for (const it of g.items) parts.push(`${it.name}, ${formatQuantity(it.quantity)}`);
-    }
-    speak(parts.join('. ') || 'Список ингредиентов пуст');
+  // Озвучивает ингредиенты ТЕКУЩЕГО шага (с раскрытием сокращений в количествах).
+  function readStepIngredients() {
+    const uses = steps[i]?.uses ?? [];
+    const parts = uses.map((u) => {
+      const q = u.quantity ? speakableQuantity(u.quantity) : u.note ?? '';
+      return q ? `${u.ingredientName}, ${q}` : u.ingredientName;
+    });
+    speak(parts.length ? parts.join('. ') : 'Для этого шага ингредиенты не указаны');
   }
   // Переход к шагу n (+ озвучка, если включена).
   function go(n: number) {
@@ -360,7 +359,7 @@ export function CookMode({
         readStep(step);
         break;
       case 'ingredients':
-        readIngredients();
+        readStepIngredients();
         break;
       case 'timer':
         startTimer(cmd.minutes, `${step.label || `Шаг ${i + 1}`}: ${cmd.minutes} мин`);
@@ -467,8 +466,8 @@ export function CookMode({
           <button onClick={() => readStep(step)} className="text-sm text-neutral-500 hover:underline">
             🔊 Прочитать шаг
           </button>
-          <button onClick={readIngredients} className="text-sm text-neutral-500 hover:underline">
-            🔊 Ингредиенты
+          <button onClick={readStepIngredients} className="text-sm text-neutral-500 hover:underline">
+            🔊 Ингредиенты шага
           </button>
           {voices.length > 1 && (
             <select
