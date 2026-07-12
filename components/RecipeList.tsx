@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { assignCategoryToRecipes, type Category } from '@/lib/recipe/categories';
-import { OPENED_KEY } from './RecordOpen';
 import type { RecipeListItem } from '@/lib/recipe/db';
 
 type Sort = 'new' | 'old' | 'az' | 'recent';
@@ -29,14 +28,12 @@ export function RecipeList({
   const [busyCat, setBusyCat] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const [sort, setSort] = useState<Sort>('new');
-  const [opened, setOpened] = useState<Record<string, number>>({});
 
-  // Загружаем сохранённую сортировку и карту открытий (localStorage).
+  // Загружаем сохранённую сортировку (это UI-предпочтение, локально — ок).
   useEffect(() => {
     try {
       const s = localStorage.getItem(SORT_KEY);
       if (s === 'new' || s === 'old' || s === 'az' || s === 'recent') setSort(s);
-      setOpened(JSON.parse(localStorage.getItem(OPENED_KEY) ?? '{}'));
     } catch {
       /* ignore */
     }
@@ -100,7 +97,9 @@ export function RecipeList({
       case 'az':
         return a.title.localeCompare(b.title, 'ru');
       case 'recent':
-        return (opened[b.id] ?? 0) - (opened[a.id] ?? 0);
+        // ISO-строки сравниваются лексикографически = хронологически; null (не
+        // открывался) -> пустая строка -> уходит вниз.
+        return (b.lastOpenedAt ?? '').localeCompare(a.lastOpenedAt ?? '');
     }
   });
 

@@ -1,20 +1,17 @@
 'use client';
 
 import { useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { touchRecipe } from '@/lib/recipe/db';
 
-export const OPENED_KEY = 'recipe-opened';
-
-// Фиксирует факт открытия рецепта в localStorage (для сортировки «недавно
-// открытые»). Пер-устройство, без обращения к БД.
+// Отмечает открытие рецепта в БД (last_opened_at) — для сортировки «недавно
+// открытые», синхронно между устройствами. RLS ограничивает своими рецептами.
 export function RecordOpen({ recipeId }: { recipeId: string }) {
   useEffect(() => {
-    try {
-      const map = JSON.parse(localStorage.getItem(OPENED_KEY) ?? '{}') as Record<string, number>;
-      map[recipeId] = Date.now();
-      localStorage.setItem(OPENED_KEY, JSON.stringify(map));
-    } catch {
-      /* ignore */
-    }
+    const sb = createClient();
+    touchRecipe(sb, recipeId).catch(() => {
+      /* не критично */
+    });
   }, [recipeId]);
   return null;
 }

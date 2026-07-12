@@ -11,6 +11,7 @@ interface Row {
   steps: StoredStep[];
   tips: string[];
   image_url: string | null;
+  last_opened_at: string | null;
   created_at: string;
 }
 
@@ -25,6 +26,7 @@ export interface RecipeListItem {
   title: string;
   imageUrl: string | null;
   createdAt: string;
+  lastOpenedAt: string | null;
 }
 
 function rowToRecord(row: Row): RecipeRecord {
@@ -43,17 +45,38 @@ function rowToRecord(row: Row): RecipeRecord {
 
 /** Список рецептов текущего пользователя (RLS ограничивает выборку). */
 export async function listRecipes(sb: SupabaseClient): Promise<RecipeListItem[]> {
-  const { data, error } = await sb
+  const first = await sb
     .from('recipes')
-    .select('id, title, image_url, created_at')
+    .select('id, title, image_url, created_at, last_opened_at')
     .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    title: r.title,
-    imageUrl: r.image_url,
-    createdAt: r.created_at,
+
+  let rows = first.data as Array<Record<string, unknown>> | null;
+  // Колонки last_opened_at может ещё не быть (SQL не применён) — фолбэк без неё.
+  if (first.error) {
+    const res = await sb
+      .from('recipes')
+      .select('id, title, image_url, created_at')
+      .order('created_at', { ascending: false });
+    if (res.error) throw res.error;
+    rows = res.data as Array<Record<string, unknown>> | null;
+  }
+
+  return (rows ?? []).map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    imageUrl: (r.image_url as string | null) ?? null,
+    createdAt: r.created_at as string,
+    lastOpenedAt: (r.last_opened_at as string | null | undefined) ?? null,
   }));
+}
+
+/** Отмечает рецепт как только что открытый (для сортировки «недавно открытые»). */
+export async function touchRecipe(sb: SupabaseClient, id: string): Promise<void> {
+  const { error } = await sb
+    .from('recipes')
+    .update({ last_opened_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
 }
 
 /** Один рецепт по id, либо null. */
