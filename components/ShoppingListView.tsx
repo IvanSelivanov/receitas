@@ -20,10 +20,16 @@ export function ShoppingListView({ items }: { items: ShoppingItem[] }) {
     });
   }
 
+  // Купленные уезжают в конец. Sort стабильный -> внутри каждой группы порядок
+  // (алфавитный из buildShoppingList) сохраняется.
+  const ordered = [...items].sort(
+    (a, b) => (bought.has(a.name) ? 1 : 0) - (bought.has(b.name) ? 1 : 0),
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <ul className="flex flex-col">
-        {items.map((it) => {
+        {ordered.map((it) => {
           const done = bought.has(it.name);
           return (
             <li key={it.name} className="border-b border-neutral-200 last:border-0 dark:border-neutral-800">
