@@ -96,6 +96,7 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
 
   let text: string | undefined;
   let finishReason: string | undefined;
+  let blockReason: string | undefined;
   try {
     const res = await withRetry(() =>
       ai.models.generateContent({
@@ -117,6 +118,16 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
     );
     text = res.text;
     finishReason = res.candidates?.[0]?.finishReason;
+    blockReason = res.promptFeedback?.blockReason;
+    if (!text) {
+      console.error('Gemini empty response:', {
+        model: MODEL,
+        finishReason,
+        blockReason,
+        candidates: res.candidates?.length,
+        usage: res.usageMetadata,
+      });
+    }
   } catch (e) {
     return { ok: false, recipes: [], error: e instanceof Error ? e.message : 'Ошибка вызова Gemini' };
   }
@@ -131,7 +142,14 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
     };
   }
 
-  if (!text) return { ok: false, recipes: [], error: 'Модель вернула пустой ответ' };
+  if (!text) {
+    const reason = blockReason
+      ? `заблокировано: ${blockReason}`
+      : finishReason
+        ? `finishReason: ${finishReason}`
+        : 'причина неизвестна';
+    return { ok: false, recipes: [], error: `Модель вернула пустой ответ (${reason})` };
+  }
 
   // Фолбэк: если JSON битый — отдаём сырой текст, приложение не падает.
   let json: unknown;
