@@ -226,6 +226,66 @@ npm run dev
 
 ---
 
+## (Рекомендуется) Вход через Google
+
+Встроенная почта Supabase для входа по ссылке жёстко лимитирована на бесплатном
+тарифе (несколько писем в час — можно упереться в «email rate limit exceeded»).
+Вход через Google это обходит: писем нет, вход в один клик. Email-вход при этом
+остаётся запасным — ничего удалять не нужно.
+
+Идея: получить в Google **Client ID** и **Client Secret** и вставить их в Supabase.
+Кнопка «Войти через Google» в приложении уже есть — она заработает, как только
+провайдер будет настроен (и локально, и на проде; ключи Google живут в Supabase,
+не в коде).
+
+### Часть A. Google Cloud Console (получить Client ID + Secret)
+
+1. Открой https://console.cloud.google.com, войди Google-аккаунтом.
+2. Вверху создай проект (выпадашка проектов → **New Project**), назови например
+   `receitas`, выбери его.
+3. Слева **APIs & Services → OAuth consent screen** (экран согласия):
+   - User Type: **External** → Create
+   - App name: `Рецепты`; support email и developer email — твой email → далее
+   - Scopes — ничего не добавляй → **Save and continue**
+   - **Test users → Add users** → впиши **свой** Google-email (чтобы вход работал,
+     пока приложение в режиме Testing) → Save
+   - Оставь режим **Testing** — для личного использования публиковать не нужно.
+4. Слева **APIs & Services → Credentials**:
+   - **Create Credentials → OAuth client ID**
+   - Application type: **Web application**
+   - **Authorized redirect URIs → Add URI** — сюда нужен callback-адрес Supabase
+     (см. следующий пункт). Формат:
+     `https://<твой-project-ref>.supabase.co/auth/v1/callback`
+   - **Create** → скопируй **Client ID** и **Client Secret**.
+
+> Точный callback-адрес не угадывай: открой Supabase → **Authentication →
+> Providers → Google** — там показан **Callback URL (for OAuth)**. Скопируй его
+> оттуда и вставь в Google (пункт 4). Так не ошибёшься с `project-ref`.
+
+### Часть B. Supabase (включить провайдер Google)
+
+1. Supabase → **Authentication → Providers** → **Google**.
+2. Включи тумблер **Enable**.
+3. Вставь **Client ID** и **Client Secret** из Части A.
+4. **Save**.
+
+### Проверка
+
+Открой приложение (локально `npm run dev` или боевой адрес) → **Войти через
+Google** → выбери аккаунт → попадаешь внутрь. Без писем.
+
+### Если не работает
+
+**Google выдаёт `redirect_uri_mismatch`**
+— адрес в *Authorized redirect URIs* (Часть A, пункт 4) не совпадает с тем, что
+показывает Supabase (Часть B). Скопируй callback из Supabase заново, вставь в
+Google **ровно** как есть.
+
+**`Unsupported provider` / кнопка ничего не делает**
+— провайдер Google не включён или не сохранён в Supabase (Часть B).
+
+---
+
 ## Публикация в интернет (деплой на Vercel)
 
 Когда локально всё работает — можно выложить приложение в интернет, чтобы
