@@ -39,7 +39,15 @@ export default async function RecipePage({ params }: { params: Promise<{ id: str
         <Link href="/" className="text-sm text-neutral-500 hover:underline">
           ← Все рецепты
         </Link>
-        <DeleteRecipeButton id={recipe.id} />
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/recipe/${recipe.id}/edit`}
+            className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+          >
+            Редактировать
+          </Link>
+          <DeleteRecipeButton id={recipe.id} />
+        </div>
       </header>
       <div className="mb-3">
         <EditableTitle recipeId={recipe.id} initial={recipe.title} />

@@ -124,6 +124,17 @@ export async function setRecipeTitle(
   if (error) throw error;
 }
 
+/** Сохраняет отредактированный состав рецепта (ингредиенты + шаги). */
+export async function setRecipeContent(
+  sb: SupabaseClient,
+  id: string,
+  groups: StoredGroup[],
+  steps: StoredStep[],
+): Promise<void> {
+  const { error } = await sb.from('recipes').update({ groups, steps }).eq('id', id);
+  if (error) throw error;
+}
+
 /** Ставит главное фото рецепта. */
 export async function setRecipeImage(sb: SupabaseClient, recipeId: string, url: string): Promise<void> {
   const { error } = await sb.from('recipes').update({ image_url: url }).eq('id', recipeId);
