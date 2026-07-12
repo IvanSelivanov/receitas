@@ -50,8 +50,30 @@ export function CookMode({
   const [timer, setTimer] = useState<{ endAt: number; label: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [extendMin, setExtendMin] = useState('');
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const firedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
+
+  function speak(text: string) {
+    const synth = window.speechSynthesis;
+    if (!synth || !text) return;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ru-RU';
+    synth.speak(u);
+  }
+  function readStep(step: StoredStep) {
+    speak([step.label, step.text].filter(Boolean).join('. '));
+  }
+  // Переход к шагу n (+ озвучка, если включена).
+  function go(n: number) {
+    const idx = Math.max(0, Math.min(steps.length - 1, n));
+    setI(idx);
+    if (autoSpeak) readStep(steps[idx]);
+  }
+
+  // Останавливаем речь при выходе.
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
   function ensureAudio(): AudioContext | null {
     if (!audioRef.current) {
@@ -169,6 +191,19 @@ export function CookMode({
         <span className="shrink-0 text-sm tabular-nums text-neutral-500">
           Шаг {i + 1} / {total}
         </span>
+        <button
+          onClick={() => {
+            const next = !autoSpeak;
+            setAutoSpeak(next);
+            if (next) readStep(step);
+            else window.speechSynthesis?.cancel();
+          }}
+          aria-label="Автоозвучка шагов"
+          title="Автоозвучка шагов при переходе"
+          className={`shrink-0 text-base ${autoSpeak ? '' : 'opacity-40'}`}
+        >
+          🔊
+        </button>
         <button onClick={onExit} aria-label="Закрыть" className="shrink-0 text-neutral-500">
           ✕
         </button>
@@ -222,6 +257,12 @@ export function CookMode({
       <div className="flex-1 overflow-y-auto px-6 py-8">
         {step.label && <p className="mb-2 text-lg font-semibold text-neutral-500">{step.label}</p>}
         <p className="text-2xl leading-relaxed">{step.text}</p>
+        <button
+          onClick={() => readStep(step)}
+          className="mt-3 text-sm text-neutral-500 hover:underline"
+        >
+          🔊 Прочитать шаг
+        </button>
 
         {step.uses.length > 0 && (
           <div className="mt-6 flex flex-wrap gap-2">
@@ -264,14 +305,14 @@ export function CookMode({
       <div className="flex gap-3 border-t border-neutral-200 p-4 dark:border-neutral-800">
         <button
           disabled={i === 0}
-          onClick={() => setI((n) => Math.max(0, n - 1))}
+          onClick={() => go(i - 1)}
           className="flex-1 rounded-lg border border-neutral-300 py-3 text-base disabled:opacity-40 dark:border-neutral-700"
         >
           Назад
         </button>
         {i < total - 1 ? (
           <button
-            onClick={() => setI((n) => Math.min(total - 1, n + 1))}
+            onClick={() => go(i + 1)}
             className="flex-[2] rounded-lg bg-neutral-900 py-3 text-base font-medium text-white dark:bg-white dark:text-neutral-900"
           >
             Далее
