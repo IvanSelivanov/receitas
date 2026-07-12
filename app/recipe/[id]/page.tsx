@@ -6,6 +6,7 @@ import { listCategories, getRecipeCategoryIds, type Category } from '@/lib/recip
 import { RecipeView } from '@/components/RecipeView';
 import { RecipeCategories } from '@/components/RecipeCategories';
 import { EditableTitle } from '@/components/EditableTitle';
+import { RecordOpen } from '@/components/RecordOpen';
 import { DeleteRecipeButton } from '@/components/DeleteRecipeButton';
 
 export default async function RecipePage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +34,7 @@ export default async function RecipePage({ params }: { params: Promise<{ id: str
 
   return (
     <main className="mx-auto max-w-2xl p-6">
+      <RecordOpen recipeId={recipe.id} />
       <header className="mb-4 flex items-center justify-between">
         <Link href="/" className="text-sm text-neutral-500 hover:underline">
           ← Все рецепты

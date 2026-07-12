@@ -1,10 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { assignCategoryToRecipes, type Category } from '@/lib/recipe/categories';
+import { OPENED_KEY } from './RecordOpen';
 import type { RecipeListItem } from '@/lib/recipe/db';
+
+type Sort = 'new' | 'old' | 'az' | 'recent';
+const SORT_KEY = 'recipe-sort';
 
 // Список рецептов: фильтр по категориям + выбор нескольких (для списка покупок и
 // массового назначения категории).
@@ -24,6 +28,28 @@ export function RecipeList({
   const [picking, setPicking] = useState(false);
   const [busyCat, setBusyCat] = useState<string | null>(null);
   const [toast, setToast] = useState('');
+  const [sort, setSort] = useState<Sort>('new');
+  const [opened, setOpened] = useState<Record<string, number>>({});
+
+  // Загружаем сохранённую сортировку и карту открытий (localStorage).
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem(SORT_KEY);
+      if (s === 'new' || s === 'old' || s === 'az' || s === 'recent') setSort(s);
+      setOpened(JSON.parse(localStorage.getItem(OPENED_KEY) ?? '{}'));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function changeSort(s: Sort) {
+    setSort(s);
+    try {
+      localStorage.setItem(SORT_KEY, s);
+    } catch {
+      /* ignore */
+    }
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -61,9 +87,22 @@ export function RecipeList({
     }
   }
 
-  const shown = activeCat
+  const filtered = activeCat
     ? recipes.filter((r) => (linkMap[r.id] ?? []).includes(activeCat))
     : recipes;
+
+  const shown = [...filtered].sort((a, b) => {
+    switch (sort) {
+      case 'new':
+        return b.createdAt.localeCompare(a.createdAt);
+      case 'old':
+        return a.createdAt.localeCompare(b.createdAt);
+      case 'az':
+        return a.title.localeCompare(b.title, 'ru');
+      case 'recent':
+        return (opened[b.id] ?? 0) - (opened[a.id] ?? 0);
+    }
+  });
 
   return (
     <>
@@ -82,6 +121,20 @@ export function RecipeList({
           </Link>
         </div>
       )}
+
+      <div className="mb-3 flex justify-end">
+        <select
+          value={sort}
+          onChange={(e) => changeSort(e.target.value as Sort)}
+          aria-label="Сортировка"
+          className="rounded-lg border border-neutral-300 bg-transparent px-2 py-1 text-sm text-neutral-600 outline-none dark:border-neutral-700 dark:text-neutral-300"
+        >
+          <option value="new">Сначала новые</option>
+          <option value="old">Сначала старые</option>
+          <option value="az">По алфавиту</option>
+          <option value="recent">Недавно открытые</option>
+        </select>
+      </div>
 
       {shown.length === 0 ? (
         <p className="py-10 text-center text-neutral-500">В этой категории пусто.</p>
