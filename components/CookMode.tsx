@@ -10,39 +10,26 @@ function mmss(totalSec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// Сигнал по окончании таймера: три коротких бипа + вибрация. Заметнее одного
-// бипа, но не назойливо (не зацикливаем).
-function alertDone() {
-  try {
-    const Ctx =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (Ctx) {
-      const ctx = new Ctx();
-      // Три бипа со сдвигом; мягкая атака/затухание, чтобы не щёлкало.
-      for (const offset of [0, 0.35, 0.7]) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        const start = ctx.currentTime + offset;
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.3, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
-        osc.start(start);
-        osc.stop(start + 0.26);
-      }
-      setTimeout(() => ctx.close(), 1300);
+// Три коротких бипа на УЖЕ разблокированном контексте (разблокировка — на тапе
+// «запустить таймер», иначе iOS Safari звук глушит). Мягкая атака/затухание.
+function playBeeps(ctx: AudioContext) {
+  for (const offset of [0, 0.35, 0.7]) {
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      const start = ctx.currentTime + offset;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.3, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
+      osc.start(start);
+      osc.stop(start + 0.26);
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* звук не критичен */
-  }
-  try {
-    navigator.vibrate?.([300, 150, 300, 150, 300]);
-  } catch {
-    /* ignore */
   }
 }
 
@@ -64,6 +51,51 @@ export function CookMode({
   const [now, setNow] = useState(() => Date.now());
   const [extendMin, setExtendMin] = useState('');
   const firedRef = useRef(false);
+  const audioRef = useRef<AudioContext | null>(null);
+
+  function ensureAudio(): AudioContext | null {
+    if (!audioRef.current) {
+      try {
+        const Ctx =
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) audioRef.current = new Ctx();
+      } catch {
+        /* нет поддержки — ок */
+      }
+    }
+    return audioRef.current;
+  }
+
+  // Разблокировка звука внутри пользовательского жеста (тап по кнопке таймера).
+  // Без этого iOS не даст проиграть звук из колбэка таймера позже.
+  function unlockAudio() {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    ctx.resume().catch(() => {});
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function playAlert() {
+    const ctx = ensureAudio();
+    if (ctx) {
+      ctx.resume().catch(() => {});
+      playBeeps(ctx);
+    }
+    // Вибрация — на Android работает, на iOS Safari игнорируется (не поддержано).
+    try {
+      navigator.vibrate?.([300, 150, 300, 150, 300]);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const remaining = timer ? Math.max(0, Math.round((timer.endAt - now) / 1000)) : 0;
 
@@ -78,9 +110,17 @@ export function CookMode({
   useEffect(() => {
     if (timer && remaining === 0 && !firedRef.current) {
       firedRef.current = true;
-      alertDone();
+      playAlert();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer, remaining]);
+
+  // Закрываем аудио-контекст при выходе из режима готовки.
+  useEffect(() => {
+    return () => {
+      audioRef.current?.close().catch(() => {});
+    };
+  }, []);
 
   // Не давать экрану гаснуть (и переполучать блокировку при возврате во вкладку).
   useEffect(() => {
@@ -104,6 +144,7 @@ export function CookMode({
   }, []);
 
   function startTimer(minutes: number, label: string) {
+    unlockAudio(); // вызывается из тапа -> разблокирует звук для iOS
     firedRef.current = false;
     setNow(Date.now());
     setTimer({ endAt: Date.now() + minutes * 60_000, label });
