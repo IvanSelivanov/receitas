@@ -5,6 +5,7 @@ import { getRecipe } from '@/lib/recipe/db';
 import { listCategories, getRecipeCategoryIds, type Category } from '@/lib/recipe/categories';
 import { RecipeView } from '@/components/RecipeView';
 import { RecipeCategories } from '@/components/RecipeCategories';
+import { EditableTitle } from '@/components/EditableTitle';
 import { DeleteRecipeButton } from '@/components/DeleteRecipeButton';
 
 export default async function RecipePage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,7 +39,9 @@ export default async function RecipePage({ params }: { params: Promise<{ id: str
         </Link>
         <DeleteRecipeButton id={recipe.id} />
       </header>
-      <h1 className="mb-3 text-2xl font-semibold">{recipe.title}</h1>
+      <div className="mb-3">
+        <EditableTitle recipeId={recipe.id} initial={recipe.title} />
+      </div>
       <div className="mb-5">
         <RecipeCategories recipeId={recipe.id} userId={user.id} all={categories} assigned={assigned} />
       </div>

@@ -91,6 +91,16 @@ export async function saveRecipes(
   return (data ?? []).map((d) => d.id as string);
 }
 
+/** Переименовывает рецепт. */
+export async function setRecipeTitle(
+  sb: SupabaseClient,
+  recipeId: string,
+  title: string,
+): Promise<void> {
+  const { error } = await sb.from('recipes').update({ title }).eq('id', recipeId);
+  if (error) throw error;
+}
+
 /** Ставит главное фото рецепта. */
 export async function setRecipeImage(sb: SupabaseClient, recipeId: string, url: string): Promise<void> {
   const { error } = await sb.from('recipes').update({ image_url: url }).eq('id', recipeId);
