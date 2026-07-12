@@ -35,7 +35,11 @@ export function IngredientList({
       <div className="flex flex-col gap-3">
         {groups.map((g, gi) => (
           <div key={gi}>
-            {g.name && <p className="mb-1 text-sm font-medium">{g.name}</p>}
+            {g.name && (
+              <p className="mb-1.5 mt-1 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+                {g.name}
+              </p>
+            )}
             <ul className="flex flex-col gap-1.5">
               {g.items.map((it) => {
                 const scaled = scaleQuantity(it.quantity, factor);
