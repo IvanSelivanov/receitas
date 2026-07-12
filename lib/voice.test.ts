@@ -42,6 +42,12 @@ describe('parseVoiceCommand', () => {
     expect(parseVoiceCommand('закрой')).toEqual({ type: 'exit' });
   });
 
+  it('ингредиенты', () => {
+    expect(parseVoiceCommand('ингредиенты')).toEqual({ type: 'ingredients' });
+    expect(parseVoiceCommand('что нужно')).toEqual({ type: 'ingredients' });
+    expect(parseVoiceCommand('прочитай ингредиенты')).toEqual({ type: 'ingredients' });
+  });
+
   it('таймер важнее навигации при конфликте слов', () => {
     // «дальше» есть, но это про таймер
     expect(parseVoiceCommand('таймер на 3 минуты')).toEqual({ type: 'timer', minutes: 3 });

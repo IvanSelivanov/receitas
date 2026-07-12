@@ -3,6 +3,7 @@ export type VoiceCommand =
   | { type: 'next' }
   | { type: 'prev' }
   | { type: 'read' }
+  | { type: 'ingredients' }
   | { type: 'stopTimer' }
   | { type: 'exit' }
   | { type: 'timer'; minutes: number };
@@ -57,6 +58,7 @@ export function parseVoiceCommand(raw: string): VoiceCommand | null {
     const minutes = extractMinutes(t);
     if (minutes != null) return { type: 'timer', minutes };
   }
+  if (/(ингредиент|что нужно|состав|продукты)/.test(t)) return { type: 'ingredients' };
   if (/(стоп|останов|сброс|отмен)/.test(t)) return { type: 'stopTimer' };
   if (/(дальше|вперёд|вперед|следующ|далее)/.test(t)) return { type: 'next' };
   if (/(назад|предыдущ|обратно|вернись)/.test(t)) return { type: 'prev' };

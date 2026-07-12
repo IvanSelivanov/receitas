@@ -87,7 +87,12 @@ export function RecipeView({ recipe, userId }: { recipe: RecipeRecord; userId: s
       <RecipeTips tips={recipe.tips} />
 
       {cooking && (
-        <CookMode steps={scaled.steps} title={recipe.title} onExit={() => setCooking(false)} />
+        <CookMode
+          steps={scaled.steps}
+          groups={scaled.groups}
+          title={recipe.title}
+          onExit={() => setCooking(false)}
+        />
       )}
     </div>
   );

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatQuantity } from '@/lib/recipe/scale';
 import { parseVoiceCommand, type VoiceCommand } from '@/lib/voice';
-import type { StoredStep } from '@/lib/schema';
+import type { StoredStep, StoredGroup } from '@/lib/schema';
 
 // Минимальные типы Web Speech API (не всегда есть в lib.dom).
 interface SREvent {
@@ -56,10 +56,12 @@ type WakeNavigator = Navigator & { wakeLock?: { request: (t: 'screen') => Promis
 // Полноэкранный пошаговый режим готовки.
 export function CookMode({
   steps,
+  groups,
   title,
   onExit,
 }: {
   steps: StoredStep[];
+  groups: StoredGroup[];
   title: string;
   onExit: () => void;
 }) {
@@ -76,6 +78,8 @@ export function CookMode({
   const audioRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<SRInstance | null>(null);
   const listeningRef = useRef(false);
+  const speakingRef = useRef(false);
+  const speakTokenRef = useRef(0);
   const dispatchRef = useRef<(c: VoiceCommand) => void>(() => {});
 
   function toggleListening() {
@@ -108,8 +112,9 @@ export function CookMode({
       if (cmd) dispatchRef.current(cmd);
     };
     rec.onend = () => {
-      // Web Speech сам останавливается после паузы — перезапускаем, пока включено.
-      if (listeningRef.current) {
+      // Web Speech сам останавливается после паузы — перезапускаем, пока включено
+      // и пока не идёт озвучка (иначе распознавание услышит собственное чтение).
+      if (listeningRef.current && !speakingRef.current) {
         try {
           rec.start();
         } catch {
@@ -132,11 +137,34 @@ export function CookMode({
   function speak(text: string, uri = voiceURI) {
     const synth = window.speechSynthesis;
     if (!synth || !text) return;
+    const token = ++speakTokenRef.current;
     synth.cancel();
+    // Пауза микрофона на время речи (иначе распознаётся собственное чтение).
+    speakingRef.current = true;
+    if (listeningRef.current) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+    }
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ru-RU';
     const v = synth.getVoices().find((x) => x.voiceURI === uri);
     if (v) u.voice = v;
+    const resume = () => {
+      if (token !== speakTokenRef.current) return; // устаревшая реплика — игнор
+      speakingRef.current = false;
+      if (listeningRef.current) {
+        try {
+          recognitionRef.current?.start();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    u.onend = resume;
+    u.onerror = resume;
     synth.speak(u);
   }
   function selectVoice(uri: string) {
@@ -150,6 +178,14 @@ export function CookMode({
   }
   function readStep(step: StoredStep) {
     speak([step.label, step.text].filter(Boolean).join('. '));
+  }
+  function readIngredients() {
+    const parts: string[] = [];
+    for (const g of groups) {
+      if (g.name) parts.push(`${g.name}.`);
+      for (const it of g.items) parts.push(`${it.name}, ${formatQuantity(it.quantity)}`);
+    }
+    speak(parts.join('. ') || 'Список ингредиентов пуст');
   }
   // Переход к шагу n (+ озвучка, если включена).
   function go(n: number) {
@@ -323,6 +359,9 @@ export function CookMode({
       case 'read':
         readStep(step);
         break;
+      case 'ingredients':
+        readIngredients();
+        break;
       case 'timer':
         startTimer(cmd.minutes, `${step.label || `Шаг ${i + 1}`}: ${cmd.minutes} мин`);
         break;
@@ -373,7 +412,9 @@ export function CookMode({
 
       {heard && (
         <div className="bg-neutral-100 px-4 py-1.5 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-          {listening ? `🎤 ${heard} · «дальше» · «назад» · «повтори» · «таймер N минут» · «стоп»` : heard}
+          {listening
+            ? `🎤 ${heard} · «дальше» · «назад» · «повтори» · «ингредиенты» · «таймер N минут» · «стоп»`
+            : heard}
         </div>
       )}
 
@@ -425,6 +466,9 @@ export function CookMode({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button onClick={() => readStep(step)} className="text-sm text-neutral-500 hover:underline">
             🔊 Прочитать шаг
+          </button>
+          <button onClick={readIngredients} className="text-sm text-neutral-500 hover:underline">
+            🔊 Ингредиенты
           </button>
           {voices.length > 1 && (
             <select
