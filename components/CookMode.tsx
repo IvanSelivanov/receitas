@@ -88,24 +88,34 @@ export function CookMode({
   // Останавливаем речь при выходе.
   useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
-  // Список голосов грузится асинхронно; подхватываем русские + сохранённый выбор.
+  // Список голосов грузится асинхронно (иногда с задержкой). Показываем ВСЕ
+  // доступные голоса, русские — первыми.
   useEffect(() => {
     const synth = window.speechSynthesis;
     if (!synth) return;
     const load = () => {
       const all = synth.getVoices();
-      const ru = all.filter((v) => v.lang.toLowerCase().startsWith('ru'));
-      setVoices(ru.length ? ru : all);
+      if (all.length === 0) return;
+      const sorted = [...all].sort((a, b) => {
+        const ar = a.lang.toLowerCase().startsWith('ru') ? 0 : 1;
+        const br = b.lang.toLowerCase().startsWith('ru') ? 0 : 1;
+        return ar - br || a.name.localeCompare(b.name);
+      });
+      setVoices(sorted);
     };
     load();
     synth.addEventListener?.('voiceschanged', load);
+    const t = setTimeout(load, 300); // фолбэк на браузеры с задержкой
     try {
       const saved = localStorage.getItem('tts-voice');
       if (saved) setVoiceURI(saved);
     } catch {
       /* ignore */
     }
-    return () => synth.removeEventListener?.('voiceschanged', load);
+    return () => {
+      synth.removeEventListener?.('voiceschanged', load);
+      clearTimeout(t);
+    };
   }, []);
 
   function ensureAudio(): AudioContext | null {
@@ -294,17 +304,17 @@ export function CookMode({
           <button onClick={() => readStep(step)} className="text-sm text-neutral-500 hover:underline">
             🔊 Прочитать шаг
           </button>
-          {voices.length > 1 && (
+          {voices.length > 0 && (
             <select
               value={voiceURI}
               onChange={(e) => selectVoice(e.target.value)}
               aria-label="Голос озвучки"
-              className="rounded-lg border border-neutral-300 bg-transparent px-2 py-1 text-sm text-neutral-600 outline-none dark:border-neutral-700 dark:text-neutral-300"
+              className="max-w-[12rem] rounded-lg border border-neutral-300 bg-transparent px-2 py-1 text-sm text-neutral-600 outline-none dark:border-neutral-700 dark:text-neutral-300"
             >
               <option value="">Голос по умолчанию</option>
               {voices.map((v) => (
                 <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name}
+                  {v.name} ({v.lang})
                 </option>
               ))}
             </select>
