@@ -1,0 +1,207 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { formatQuantity } from '@/lib/recipe/scale';
+import type { StoredStep } from '@/lib/schema';
+
+function mmss(totalSec: number): string {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// Короткий сигнал + вибрация по окончании таймера.
+function alertDone() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (Ctx) {
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+      setTimeout(() => ctx.close(), 900);
+    }
+  } catch {
+    /* звук не критичен */
+  }
+  try {
+    navigator.vibrate?.([200, 100, 200]);
+  } catch {
+    /* ignore */
+  }
+}
+
+type WakeSentinel = { release: () => Promise<void> };
+type WakeNavigator = Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeSentinel> } };
+
+// Полноэкранный пошаговый режим готовки.
+export function CookMode({
+  steps,
+  title,
+  onExit,
+}: {
+  steps: StoredStep[];
+  title: string;
+  onExit: () => void;
+}) {
+  const [i, setI] = useState(0);
+  const [timer, setTimer] = useState<{ endAt: number; label: string } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const firedRef = useRef(false);
+
+  const remaining = timer ? Math.max(0, Math.round((timer.endAt - now) / 1000)) : 0;
+
+  // Тикаем, пока таймер активен.
+  useEffect(() => {
+    if (!timer) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [timer]);
+
+  // Сигнал ровно один раз при достижении нуля.
+  useEffect(() => {
+    if (timer && remaining === 0 && !firedRef.current) {
+      firedRef.current = true;
+      alertDone();
+    }
+  }, [timer, remaining]);
+
+  // Не давать экрану гаснуть (и переполучать блокировку при возврате во вкладку).
+  useEffect(() => {
+    let sentinel: WakeSentinel | null = null;
+    const request = async () => {
+      try {
+        sentinel = (await (navigator as WakeNavigator).wakeLock?.request('screen')) ?? null;
+      } catch {
+        /* не поддерживается — ок */
+      }
+    };
+    request();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') request();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      sentinel?.release().catch(() => {});
+    };
+  }, []);
+
+  function startTimer(minutes: number, label: string) {
+    firedRef.current = false;
+    setNow(Date.now());
+    setTimer({ endAt: Date.now() + minutes * 60_000, label });
+  }
+
+  const step = steps[i];
+  const total = steps.length;
+  const progress = total > 0 ? ((i + 1) / total) * 100 : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-neutral-950">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <span className="min-w-0 flex-1 truncate text-sm text-neutral-500">{title}</span>
+        <span className="shrink-0 text-sm tabular-nums text-neutral-500">
+          Шаг {i + 1} / {total}
+        </span>
+        <button onClick={onExit} aria-label="Закрыть" className="shrink-0 text-neutral-500">
+          ✕
+        </button>
+      </div>
+      <div className="h-1 bg-neutral-100 dark:bg-neutral-900">
+        <div className="h-full bg-neutral-900 transition-all dark:bg-white" style={{ width: `${progress}%` }} />
+      </div>
+
+      {timer && (
+        <div
+          className={`flex items-center justify-between px-4 py-2.5 ${
+            remaining === 0 ? 'bg-green-600 text-white' : 'bg-neutral-100 dark:bg-neutral-900'
+          }`}
+        >
+          <span className="min-w-0 flex-1 truncate text-sm">{timer.label}</span>
+          <span className="shrink-0 text-lg font-semibold tabular-nums">
+            {remaining === 0 ? 'Готово!' : mmss(remaining)}
+          </span>
+          <button onClick={() => setTimer(null)} className="ml-3 shrink-0 text-sm underline">
+            стоп
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        {step.label && <p className="mb-2 text-lg font-semibold text-neutral-500">{step.label}</p>}
+        <p className="text-2xl leading-relaxed">{step.text}</p>
+
+        {step.uses.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-2">
+            {step.uses.map((u, ui) => (
+              <span
+                key={ui}
+                className="rounded-full bg-neutral-100 px-3 py-1.5 text-base dark:bg-neutral-800"
+              >
+                {u.ingredientName}
+                {u.quantity ? ` · ${formatQuantity(u.quantity)}` : u.note ? ` · ${u.note}` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {step.timers.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-2">
+            {step.timers.map((t, ti) => {
+              const label = t.minMin === t.maxMin ? `${t.minMin}` : `${t.minMin}–${t.maxMin}`;
+              return (
+                <button
+                  key={ti}
+                  onClick={() =>
+                    startTimer(t.minMin, `${step.label || `Шаг ${i + 1}`}: ${label} мин`)
+                  }
+                  className="rounded-lg border border-neutral-300 px-4 py-2.5 text-base dark:border-neutral-700"
+                >
+                  ▶ Таймер {label} мин
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {step.temperatureC != null && (
+          <p className="mt-4 text-base text-neutral-500">Температура: {step.temperatureC}°C</p>
+        )}
+      </div>
+
+      <div className="flex gap-3 border-t border-neutral-200 p-4 dark:border-neutral-800">
+        <button
+          disabled={i === 0}
+          onClick={() => setI((n) => Math.max(0, n - 1))}
+          className="flex-1 rounded-lg border border-neutral-300 py-3 text-base disabled:opacity-40 dark:border-neutral-700"
+        >
+          Назад
+        </button>
+        {i < total - 1 ? (
+          <button
+            onClick={() => setI((n) => Math.min(total - 1, n + 1))}
+            className="flex-[2] rounded-lg bg-neutral-900 py-3 text-base font-medium text-white dark:bg-white dark:text-neutral-900"
+          >
+            Далее
+          </button>
+        ) : (
+          <button
+            onClick={onExit}
+            className="flex-[2] rounded-lg bg-green-600 py-3 text-base font-medium text-white"
+          >
+            Готово
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

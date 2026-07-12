@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { IngredientList, RecipeSteps, RecipeTips } from './RecipeBody';
 import { PhotoUpload } from './PhotoUpload';
+import { CookMode } from './CookMode';
 import { scaleRecipe, FACTORS } from '@/lib/recipe/scaleRecipe';
 import { createClient } from '@/lib/supabase/client';
 import { compressImage } from '@/lib/image/compress';
@@ -17,6 +18,7 @@ const isPreset = (f: number) => FACTORS.some((p) => Math.abs(p - f) < 1e-9);
 export function RecipeView({ recipe, userId }: { recipe: RecipeRecord; userId: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [factor, setFactor] = useState(1);
+  const [cooking, setCooking] = useState(false);
   const [mainImage, setMainImage] = useState<string | null>(recipe.imageUrl);
   const [stepImages, setStepImages] = useState<(string | null | undefined)[]>(
     recipe.steps.map((s) => s.imageUrl ?? null),
@@ -71,9 +73,22 @@ export function RecipeView({ recipe, userId }: { recipe: RecipeRecord; userId: s
         </p>
       </div>
 
+      {scaled.steps.length > 0 && (
+        <button
+          onClick={() => setCooking(true)}
+          className="rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
+        >
+          ▶ Готовить пошагово
+        </button>
+      )}
+
       <IngredientList groups={recipe.groups} factor={factor} editable onSetFactor={setFactor} />
       <RecipeSteps steps={scaled.steps} stepImages={stepImages} onStepPhoto={uploadStep} />
       <RecipeTips tips={recipe.tips} />
+
+      {cooking && (
+        <CookMode steps={scaled.steps} title={recipe.title} onExit={() => setCooking(false)} />
+      )}
     </div>
   );
 }
