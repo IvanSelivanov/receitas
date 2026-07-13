@@ -28,6 +28,7 @@ export function RecipeList({
   const [busyCat, setBusyCat] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const [sort, setSort] = useState<Sort>('new');
+  const [query, setQuery] = useState('');
 
   // Загружаем сохранённую сортировку (это UI-предпочтение, локально — ок).
   useEffect(() => {
@@ -84,11 +85,22 @@ export function RecipeList({
     }
   }
 
+  function selectCat(id: string | null) {
+    setActiveCat(id);
+    setQuery(''); // поиск привязан к текущей категории — при смене сбрасываем
+  }
+
   const filtered = activeCat
     ? recipes.filter((r) => (linkMap[r.id] ?? []).includes(activeCat))
     : recipes;
 
-  const shown = [...filtered].sort((a, b) => {
+  // Поиск показываем, только когда в текущей категории заметно много рецептов —
+  // на коротком списке он лишний.
+  const showSearch = filtered.length > 5;
+  const q = query.trim().toLowerCase();
+  const searched = showSearch && q ? filtered.filter((r) => r.title.toLowerCase().includes(q)) : filtered;
+
+  const shown = [...searched].sort((a, b) => {
     switch (sort) {
       case 'new':
         return b.createdAt.localeCompare(a.createdAt);
@@ -109,11 +121,11 @@ export function RecipeList({
         <div className="mb-4 flex items-center gap-2">
           {/* Горизонтальная прокрутка внутри полосы: чипы не растягивают страницу. */}
           <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Chip active={activeCat === null} onClick={() => setActiveCat(null)}>
+            <Chip active={activeCat === null} onClick={() => selectCat(null)}>
               Все
             </Chip>
             {categories.map((c) => (
-              <Chip key={c.id} active={activeCat === c.id} onClick={() => setActiveCat(c.id)}>
+              <Chip key={c.id} active={activeCat === c.id} onClick={() => selectCat(c.id)}>
                 {c.name}
               </Chip>
             ))}
@@ -121,6 +133,19 @@ export function RecipeList({
           <Link href="/categories" className="shrink-0 text-sm text-neutral-500 hover:underline">
             Категории
           </Link>
+        </div>
+      )}
+
+      {showSearch && (
+        <div className="mb-3">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по названию"
+            aria-label="Поиск по названию"
+            className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
+          />
         </div>
       )}
 
@@ -139,7 +164,9 @@ export function RecipeList({
       </div>
 
       {shown.length === 0 ? (
-        <p className="py-10 text-center text-neutral-500">В этой категории пусто.</p>
+        <p className="py-10 text-center text-neutral-500">
+          {showSearch && q ? 'Ничего не найдено.' : 'В этой категории пусто.'}
+        </p>
       ) : (
         <ul className="flex flex-col gap-2 pb-24">
           {shown.map((r) => (
