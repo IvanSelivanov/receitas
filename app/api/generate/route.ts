@@ -61,9 +61,13 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await generateRecipes(
-    prompt || 'Извлеки рецепт(ы) из приложенного файла, ничего не выдумывая.',
+    prompt ||
+      'Определи, что в приложенном файле: если это рецепт (текст/скриншот/скан) — извлеки его точно; ' +
+        'если фото готового блюда или продуктов — определи блюдо и предложи рецепт, как его приготовить.',
     media,
   );
-  // ok:false с raw (битый JSON) — тоже отдаём 200, чтобы UI показал сырой текст.
-  return NextResponse.json(result, { status: result.error && !result.raw ? 502 : 200 });
+  // Результат всегда «обработанный» (generateRecipes сам ловит ошибки Gemini),
+  // поэтому отдаём 200 и полагаемся на data.ok в UI. Не-2xx (502) оставляем для
+  // настоящих падений функции — так в мониторинге не тонут реальные сбои.
+  return NextResponse.json(result);
 }

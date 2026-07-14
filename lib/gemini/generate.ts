@@ -44,9 +44,10 @@ const SYSTEM = `Ты — помощник по рецептам. По запро
   ]
 }
 Правила:
-- Если приложен файл (фото, скриншот, скан, PDF, текст) — извлеки рецепт(ы) из него, ничего не выдумывая.
+- Если приложен файл с рецептом (скриншот, скан, PDF, текст, фото страницы книги) — извлеки рецепт(ы) точно, ничего не добавляя от себя.
+- Если на фото готовое блюдо или набор продуктов (без текста рецепта) — определи, что это за блюдо, и предложи подходящий рецепт, как его приготовить. Реконструировать рецепт по виду блюда здесь нормально и ожидаемо.
 - Если в запросе есть ссылка (URL) — открой её и пересказывай рецепт именно с этой страницы, ничего не выдумывай.
-- Если источник (ссылку или файл) прочитать не удалось — верни recipes: [] (пустой массив), НЕ выдумывай рецепт и НЕ создавай заглушку.
+- Если ССЫЛКУ открыть не удалось — верни recipes: [] (пустой массив) и не выдумывай рецепт. Это касается ТОЛЬКО ссылок; для фото блюда рецепт предлагай всегда.
 - amount оставляй как в рецепте ("50–70 г", "по вкусу", "2 зубчика") — НЕ переводи единицы.
 - В uses[].ingredient пиши ИМЯ ровно так, как в groups, чтобы можно было сматчить.
 - Для КАЖДОГО ингредиента в uses указывай amount — количество, идущее на этом шаге (по умолчанию столько же, сколько в groups). Не оставляй amount пустым без причины; если ингредиент уже частично ушёл в прошлом шаге — ставь note "оставшееся".
@@ -79,9 +80,20 @@ export interface GenerateResult {
   error?: string;
 }
 
-const SOURCE_FAIL =
-  'Не удалось извлечь рецепт из источника. Instagram/TikTok блокируют доступ по ссылке — ' +
-  'вставь текст описания или загрузи скриншот/файл.';
+// Сообщение, когда модель не смогла ничего вернуть по источнику. Текст зависит
+// от того, что за источник: у ссылки и у фото причины (и советы) разные.
+function sourceFail(media: Media | undefined, hasUrl: boolean): string {
+  if (media?.mimeType.startsWith('image/')) {
+    return 'Не удалось разобрать блюдо на фото. Попробуй снимок почётче или подскажи текстом, что это за блюдо.';
+  }
+  if (media) {
+    return 'Не удалось извлечь рецепт из файла. Попробуй другой файл или вставь текст рецепта.';
+  }
+  if (hasUrl) {
+    return 'Не удалось открыть ссылку. Instagram/TikTok блокируют доступ — вставь текст описания или загрузи скриншот/фото.';
+  }
+  return 'Не удалось составить рецепт по запросу. Уточни, что именно приготовить.';
+}
 
 export async function generateRecipes(userPrompt: string, media?: Media): Promise<GenerateResult> {
   const key = process.env.GEMINI_API_KEY;
@@ -172,7 +184,7 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
     Array.isArray((enveloped as { recipes?: unknown }).recipes) &&
     (enveloped as { recipes: unknown[] }).recipes.length === 0
   ) {
-    return { ok: false, recipes: [], error: SOURCE_FAIL };
+    return { ok: false, recipes: [], error: sourceFail(media, hasUrl) };
   }
 
   const parsed = GeminiResponse.safeParse(enveloped);
@@ -188,7 +200,7 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
     (r) => r.steps.length === 0 && r.groups.every((g) => g.items.length === 0),
   );
   if (allEmpty) {
-    return { ok: false, recipes: [], error: SOURCE_FAIL };
+    return { ok: false, recipes: [], error: sourceFail(media, hasUrl) };
   }
 
   return { ok: true, recipes };
