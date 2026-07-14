@@ -5,6 +5,7 @@ import { IngredientList, RecipeSteps, RecipeTips } from './RecipeBody';
 import { PhotoUpload } from './PhotoUpload';
 import { CookMode } from './CookMode';
 import { ShareButton } from './ShareButton';
+import { RecipeQA } from './RecipeQA';
 import { scaleRecipe, FACTORS } from '@/lib/recipe/scaleRecipe';
 import { recipeToText } from '@/lib/recipe/shareText';
 import { createClient } from '@/lib/supabase/client';
@@ -90,6 +91,8 @@ export function RecipeView({ recipe, userId }: { recipe: RecipeRecord; userId: s
       <IngredientList groups={recipe.groups} factor={factor} editable onSetFactor={setFactor} />
       <RecipeSteps steps={scaled.steps} stepImages={stepImages} onStepPhoto={uploadStep} />
       <RecipeTips tips={recipe.tips} />
+
+      <RecipeQA recipeId={recipe.id} />
 
       {cooking && (
         <CookMode steps={scaled.steps} title={recipe.title} onExit={() => setCooking(false)} />

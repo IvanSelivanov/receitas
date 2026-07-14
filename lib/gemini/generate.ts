@@ -1,5 +1,6 @@
 import { GoogleGenAI, createUserContent, createPartFromBase64 } from '@google/genai';
 import { GeminiResponse, normalizeRecipe, stripFence, normalizeEnvelope, type StoredRecipe } from '../schema';
+import { MODEL, withRetry } from './client';
 
 // Приложенный файл (картинка или PDF) в base64.
 export interface Media {
@@ -13,10 +14,6 @@ export interface Media {
 // SDK: @google/genai (новый). Метод: ai.models.generateContent(...).
 // Решение Eng Review: structured output + zod-валидация + фолбэк на сырой текст
 // при невалидном JSON. Рецептов может быть 1..N.
-
-// Flash Lite: 500 запросов/сутки на бесплатном тарифе (против 20 у 3.5-flash),
-// быстрее и дешевле. Генерации рецепта со структурой качества lite хватает.
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 const SYSTEM = `Ты — помощник по рецептам. По запросу пользователя предложи один или несколько рецептов.
 Верни СТРОГО JSON вида:
@@ -53,24 +50,6 @@ const SYSTEM = `Ты — помощник по рецептам. По запро
 - Для КАЖДОГО ингредиента в uses указывай amount — количество, идущее на этом шаге (по умолчанию столько же, сколько в groups). Не оставляй amount пустым без причины; если ингредиент уже частично ушёл в прошлом шаге — ставь note "оставшееся".
 - Если у шага есть время готовки — заполни timerMinMinutes (и timerMaxMinutes для диапазона).
 - Никакого текста вне JSON.`;
-
-// Ретрай на временные ошибки Gemini (503 UNAVAILABLE / 429). Экспоненциальный
-// бэкофф. Постоянные ошибки (401 ключ, 400 запрос) пробрасываем сразу.
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
-  let lastErr: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      const msg = e instanceof Error ? e.message : String(e);
-      const transient = /\b(503|429|UNAVAILABLE|high demand|overloaded)\b/i.test(msg);
-      if (!transient || i === attempts - 1) throw e;
-      await new Promise((r) => setTimeout(r, 800 * 2 ** i)); // 0.8s, 1.6s
-    }
-  }
-  throw lastErr;
-}
 
 export interface GenerateResult {
   ok: boolean;
