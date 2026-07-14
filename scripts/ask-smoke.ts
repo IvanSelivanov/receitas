@@ -13,7 +13,11 @@ const ctx = `Блины
 async function main() {
   const a = await askAboutRecipe(ctx, 'Чем заменить молоко, если его нет?');
   console.log('[замена]', a.ok ? a.answer : `ERR: ${a.error}`);
-  const b = await askAboutRecipe(ctx, 'Какой счёт был в матче вчера?');
-  console.log('[офтоп]', b.ok ? b.answer : `ERR: ${b.error}`);
+
+  // Уточняющий вопрос без явного упоминания молока — проверяем, что контекст диалога работает.
+  const b = await askAboutRecipe(ctx, 'А сколько тогда брать, если возьму кефир?', [
+    { q: 'Чем заменить молоко, если его нет?', a: a.answer ?? '' },
+  ]);
+  console.log('\n[уточнение]', b.ok ? b.answer : `ERR: ${b.error}`);
 }
 main().catch((e) => console.error(e));

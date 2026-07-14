@@ -10,7 +10,8 @@ const SYSTEM = `Ты — кулинарный помощник. Пользова
 кулинарные знания: предлагать замены ингредиентов, объяснять технику, температуру, тайминг,
 пропорции. Если замена заметно влияет на вкус или текстуру — предупреди об этом.
 Не выдумывай того, чего не знаешь. Если вопрос вообще не про этот рецепт или не про готовку —
-вежливо скажи, что помогаешь только с этим рецептом.`;
+вежливо скажи, что помогаешь только с этим рецептом.
+Учитывай предыдущие вопросы и ответы в этом диалоге — пользователь может уточнять («а сколько тогда?»).`;
 
 export interface AskResult {
   ok: boolean;
@@ -18,20 +19,40 @@ export interface AskResult {
   error?: string;
 }
 
-export async function askAboutRecipe(recipeContext: string, question: string): Promise<AskResult> {
+// Пара «вопрос-ответ» из предыдущих реплик той же сессии (для контекста диалога).
+export interface QAPair {
+  q: string;
+  a: string;
+}
+
+export async function askAboutRecipe(
+  recipeContext: string,
+  question: string,
+  history: QAPair[] = [],
+): Promise<AskResult> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, error: 'GEMINI_API_KEY не задан' };
 
   const ai = new GoogleGenAI({ apiKey: key });
-  const prompt = `Рецепт:\n${recipeContext}\n\nВопрос: ${question}`;
+
+  // Multi-turn: прошлые Q&A идут отдельными репликами user/model, новый вопрос —
+  // последней user-репликой. Рецепт кладём в системную инструкцию, чтобы реплики
+  // диалога оставались чистыми (только вопросы и ответы).
+  const contents = [
+    ...history.flatMap((qa) => [
+      { role: 'user', parts: [{ text: qa.q }] },
+      { role: 'model', parts: [{ text: qa.a }] },
+    ]),
+    { role: 'user', parts: [{ text: question }] },
+  ];
 
   try {
     const res = await withRetry(() =>
       ai.models.generateContent({
         model: MODEL,
-        contents: prompt,
+        contents,
         config: {
-          systemInstruction: SYSTEM,
+          systemInstruction: `${SYSTEM}\n\nРецепт:\n${recipeContext}`,
           thinkingConfig: { thinkingBudget: 0 },
           maxOutputTokens: 1024,
         },

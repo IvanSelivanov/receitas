@@ -26,7 +26,8 @@ export function RecipeQA({ recipeId }: { recipeId: string }) {
       const res = await fetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipeId, question: trimmed }),
+        // Передаём прошлые Q&A этой сессии — чтобы можно было уточнять («а сколько тогда?»).
+        body: JSON.stringify({ recipeId, question: trimmed, history: history.slice(-6) }),
       });
       const data = (await res.json()) as { ok?: boolean; answer?: string; error?: string };
       if (!res.ok || !data.ok || !data.answer) {
