@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { assignCategoryToRecipes, type Category } from '@/lib/recipe/categories';
@@ -29,6 +29,7 @@ export function RecipeList({
   const [toast, setToast] = useState('');
   const [sort, setSort] = useState<Sort>('new');
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Загружаем сохранённую сортировку (это UI-предпочтение, локально — ок).
   useEffect(() => {
@@ -50,6 +51,10 @@ export function RecipeList({
   }
 
   function toggle(id: string) {
+    // На iOS при активном поиске клавиатура перекрывает нижнюю панель действий
+    // (fixed bottom-0). Снимаем фокус с поиска — клавиатура опускается, кнопки
+    // «Список покупок» / «В категорию» становятся доступны.
+    searchRef.current?.blur();
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -139,6 +144,7 @@ export function RecipeList({
       {showSearch && (
         <div className="mb-3">
           <input
+            ref={searchRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -198,7 +204,7 @@ export function RecipeList({
       )}
 
       {selected.size > 0 && (
-        <div className="fixed inset-x-0 bottom-0 flex flex-col items-center gap-2 p-4">
+        <div className="fixed inset-x-0 bottom-0 z-10 flex flex-col items-center gap-2 p-4">
           {picking && (
             <div className="flex max-w-full flex-wrap justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white p-3 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
               {categories.length === 0 ? (
