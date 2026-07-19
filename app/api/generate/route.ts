@@ -38,8 +38,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Слишком часто. Попробуй позже.' }, { status: 429 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { prompt?: unknown; media?: unknown };
+  const body = (await request.json().catch(() => ({}))) as {
+    prompt?: unknown;
+    media?: unknown;
+    avoid?: unknown;
+  };
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+
+  // Названия уже показанных рецептов — чтобы «Другой вариант» не повторялся.
+  const avoid = Array.isArray(body.avoid)
+    ? body.avoid.filter((x): x is string => typeof x === 'string').slice(0, 20).map((s) => s.slice(0, 200))
+    : [];
 
   let media: Media | undefined;
   if (body.media && typeof body.media === 'object') {
@@ -65,6 +74,7 @@ export async function POST(request: NextRequest) {
       'Определи, что в приложенном файле: если это рецепт (текст/скриншот/скан) — извлеки его точно; ' +
         'если фото готового блюда или продуктов — определи блюдо и предложи рецепт, как его приготовить.',
     media,
+    avoid,
   );
   // Результат всегда «обработанный» (generateRecipes сам ловит ошибки Gemini),
   // поэтому отдаём 200 и полагаемся на data.ok в UI. Не-2xx (502) оставляем для

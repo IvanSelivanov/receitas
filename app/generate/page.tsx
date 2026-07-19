@@ -41,6 +41,8 @@ export default function GeneratePage() {
   const [recipes, setRecipes] = useState<StoredRecipe[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
+  // Названия всех показанных за сессию рецептов — чтобы «Другой вариант» не повторялся.
+  const [seen, setSeen] = useState<string[]>([]);
 
   // Готовит тело запроса: текст, картинку/PDF (media) или текст из файла.
   async function buildPayload(): Promise<{ prompt: string; media?: Media }> {
@@ -59,20 +61,18 @@ export default function GeneratePage() {
     return { prompt: `Извлеки рецепт(ы) из текста${prompt ? ` (${prompt})` : ''}:\n\n${text}` };
   }
 
-  async function generate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!prompt.trim() && !file) return;
+  // Один прогон генерации. avoid — названия рецептов, которые не надо повторять
+  // (для «Другого варианта»). Показанные названия копим в seen.
+  async function run(avoid: string[]) {
     setLoading(true);
     setError('');
     setRaw('');
-    setRecipes([]);
-    setSelected(new Set());
     try {
       const payload = await buildPayload();
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, avoid }),
       });
       const data = (await res.json()) as GenResult;
       if (!res.ok || !data.ok) {
@@ -81,12 +81,28 @@ export default function GeneratePage() {
       } else {
         setRecipes(data.recipes);
         setSelected(new Set(data.recipes.map((_, i) => i)));
+        setSeen((prev) => [...prev, ...data.recipes.map((r) => r.title)]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Сеть недоступна. Попробуй ещё раз.');
     } finally {
       setLoading(false);
     }
+  }
+
+  function generate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!prompt.trim() && !file) return;
+    setRecipes([]);
+    setSelected(new Set());
+    setSeen([]); // новый запрос — забываем прошлые названия
+    run([]);
+  }
+
+  // «Другой вариант»: тот же запрос, но модели говорим не повторять уже виденное.
+  function regenerate() {
+    if (loading) return;
+    run(seen);
   }
 
   function toggle(i: number) {
@@ -224,13 +240,22 @@ export default function GeneratePage() {
             ))}
           </div>
 
-          <button
-            onClick={save}
-            disabled={saving || selected.size === 0}
-            className="mt-4 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-          >
-            {saving ? 'Сохраняю…' : `Сохранить (${selected.size})`}
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={save}
+              disabled={saving || loading || selected.size === 0}
+              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
+            >
+              {saving ? 'Сохраняю…' : `Сохранить (${selected.size})`}
+            </button>
+            <button
+              onClick={regenerate}
+              disabled={loading || saving}
+              className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-200"
+            >
+              {loading ? 'Генерирую…' : '↻ Другой вариант'}
+            </button>
+          </div>
         </section>
       )}
     </main>

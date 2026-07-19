@@ -74,16 +74,38 @@ function sourceFail(media: Media | undefined, hasUrl: boolean): string {
   return 'Не удалось составить рецепт по запросу. Уточни, что именно приготовить.';
 }
 
-export async function generateRecipes(userPrompt: string, media?: Media): Promise<GenerateResult> {
+// Указание модели дать ИНОЙ рецепт («другой вариант»). Без него повтор того же
+// запроса почти всегда возвращает тот же рецепт.
+function differentVariantHint(avoid: string[]): string {
+  const list = avoid
+    .filter(Boolean)
+    .map((t) => `«${t}»`)
+    .join(', ');
+  return (
+    `Важно: предложи ДРУГОЙ рецепт, не повторяя уже предложенные (${list}). ` +
+    `Выбери иное блюдо или заметно иной способ приготовления — не вариацию тех же.`
+  );
+}
+
+export async function generateRecipes(
+  userPrompt: string,
+  media?: Media,
+  avoid: string[] = [],
+): Promise<GenerateResult> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, recipes: [], error: 'GEMINI_API_KEY не задан' };
 
   const ai = new GoogleGenAI({ apiKey: key });
 
+  // При запросе «другого варианта» добавляем к промпту указание не повторяться.
+  const effectivePrompt = avoid.length
+    ? `${userPrompt}\n\n${differentVariantHint(avoid)}`
+    : userPrompt;
+
   // С файлом — мультимодальный запрос (картинка/PDF + текст), иначе просто текст.
   const contents = media
-    ? createUserContent([createPartFromBase64(media.dataB64, media.mimeType), userPrompt])
-    : userPrompt;
+    ? createUserContent([createPartFromBase64(media.dataB64, media.mimeType), effectivePrompt])
+    : effectivePrompt;
 
   // urlContext включаем ТОЛЬКО при наличии ссылки в запросе. Иначе тул иногда
   // сам тянет контент (десятки тысяч токенов) и модель отдаёт пустой ответ.
@@ -102,6 +124,8 @@ export async function generateRecipes(userPrompt: string, media?: Media): Promis
           responseMimeType: 'application/json',
           // URL context — только когда в запросе есть ссылка (см. hasUrl выше).
           ...(hasUrl ? { tools: [{ urlContext: {} }] } : {}),
+          // «Другой вариант» — поднимаем температуру для большего разнообразия.
+          ...(avoid.length ? { temperature: 1.2 } : {}),
           // Размышления (thinking) плавают по длине и съедают бюджет вывода —
           // это причина случайной обрезки JSON. Для структурной генерации они
           // не нужны: выключаем и отдаём весь бюджет ответу.
