@@ -9,6 +9,9 @@ import type { RecipeListItem } from '@/lib/recipe/db';
 type Sort = 'new' | 'old' | 'az' | 'recent';
 const SORT_KEY = 'recipe-sort';
 
+// Виртуальная категория: рецепты, которым не назначена ни одна категория.
+const UNCATEGORIZED = '__uncat__';
+
 // Список рецептов: фильтр по категориям + выбор нескольких (для списка покупок и
 // массового назначения категории).
 export function RecipeList({
@@ -95,9 +98,14 @@ export function RecipeList({
     setQuery(''); // поиск привязан к текущей категории — при смене сбрасываем
   }
 
-  const filtered = activeCat
-    ? recipes.filter((r) => (linkMap[r.id] ?? []).includes(activeCat))
-    : recipes;
+  const hasUncategorized = recipes.some((r) => (linkMap[r.id] ?? []).length === 0);
+
+  const filtered =
+    activeCat === null
+      ? recipes
+      : activeCat === UNCATEGORIZED
+        ? recipes.filter((r) => (linkMap[r.id] ?? []).length === 0)
+        : recipes.filter((r) => (linkMap[r.id] ?? []).includes(activeCat));
 
   // Поиск показываем, только когда в текущей категории заметно много рецептов —
   // на коротком списке он лишний.
@@ -123,9 +131,9 @@ export function RecipeList({
   return (
     <>
       {categories.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          {/* Горизонтальная прокрутка внутри полосы: чипы не растягивают страницу. */}
-          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="mb-4 flex items-start gap-2">
+          {/* Чипы переносятся на несколько строк (как на странице рецепта). */}
+          <div className="flex flex-1 flex-wrap gap-1.5">
             <Chip active={activeCat === null} onClick={() => selectCat(null)}>
               Все
             </Chip>
@@ -134,8 +142,19 @@ export function RecipeList({
                 {c.name}
               </Chip>
             ))}
+            {hasUncategorized && (
+              <Chip
+                active={activeCat === UNCATEGORIZED}
+                onClick={() => selectCat(UNCATEGORIZED)}
+              >
+                Без категории
+              </Chip>
+            )}
           </div>
-          <Link href="/categories" className="shrink-0 text-sm text-neutral-500 hover:underline">
+          <Link
+            href="/categories"
+            className="mt-1 shrink-0 text-sm text-neutral-500 hover:underline"
+          >
             Категории
           </Link>
         </div>
