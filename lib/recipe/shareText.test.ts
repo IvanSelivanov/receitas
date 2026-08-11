@@ -43,6 +43,28 @@ describe('recipeToText', () => {
     expect(t).toContain('• Соль — по вкусу');
   });
 
+  it('добавляет КБЖУ и не масштабирует его вместе с порциями', () => {
+    const withNutrition: StoredRecipe = {
+      ...make(),
+      nutrition: {
+        total: { kcal: 2400, protein: 90, fat: 120, carbs: 210 },
+        totalWeightG: 1200,
+        servings: 4,
+        note: null,
+        computedAt: '2026-08-11T10:00:00.000Z',
+      },
+    };
+    const t1 = recipeToText(withNutrition);
+    expect(t1).toContain('На порцию: 600 ккал · Б 22.5 · Ж 30 · У 52.5');
+    expect(t1).toContain('На 100 г: 200 ккал · Б 7.5 · Ж 10 · У 17.5');
+    // ×2 — это вдвое больше таких же порций, КБЖУ порции прежнее.
+    expect(recipeToText(withNutrition, 2)).toContain('На порцию: 600 ккал');
+  });
+
+  it('без КБЖУ блок не появляется', () => {
+    expect(recipeToText(make())).not.toContain('На 100 г');
+  });
+
   it('нумерует шаги подряд', () => {
     const t = recipeToText(make());
     expect(t.indexOf('1. Бульон')).toBeLessThan(t.indexOf('2. Добавить овощи'));

@@ -6,6 +6,7 @@ import { PhotoUpload } from './PhotoUpload';
 import { CookMode } from './CookMode';
 import { ShareButton } from './ShareButton';
 import { RecipeQA } from './RecipeQA';
+import { NutritionPanel } from './Nutrition';
 import { scaleRecipe, FACTORS } from '@/lib/recipe/scaleRecipe';
 import { recipeToText } from '@/lib/recipe/shareText';
 import { createClient } from '@/lib/supabase/client';
@@ -89,6 +90,7 @@ export function RecipeView({ recipe, userId }: { recipe: RecipeRecord; userId: s
       </div>
 
       <IngredientList groups={recipe.groups} factor={factor} editable onSetFactor={setFactor} />
+      <NutritionPanel recipeId={recipe.id} initial={recipe.nutrition} />
       <RecipeSteps steps={scaled.steps} stepImages={stepImages} onStepPhoto={uploadStep} />
       <RecipeTips tips={recipe.tips} />
 

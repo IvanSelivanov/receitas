@@ -1,6 +1,7 @@
 import { GoogleGenAI, createUserContent, createPartFromBase64 } from '@google/genai';
 import { GeminiResponse, normalizeRecipe, stripFence, normalizeEnvelope, type StoredRecipe } from '../schema';
 import { MODEL, withRetry } from './client';
+import { NUTRITION_RULES } from './nutrition';
 
 // Приложенный файл (картинка или PDF) в base64.
 export interface Media {
@@ -36,7 +37,15 @@ const SYSTEM = `Ты — помощник по рецептам. По запро
           "uses": [ { "ingredient": "точное имя ингредиента из groups", "amount": "5 ст. л." или null, "note": "оставшееся" или null } ]
         }
       ],
-      "tips": ["общие советы"]
+      "tips": ["общие советы"],
+      "nutrition": {
+        "totalWeightG": вес_готового_блюда_в_граммах,
+        "kcal": калории_на_всё_блюдо,
+        "protein": белки_г_на_всё_блюдо,
+        "fat": жиры_г_на_всё_блюдо,
+        "carbs": углеводы_г_на_всё_блюдо,
+        "note": "что не учтено, или null"
+      }
     }
   ]
 }
@@ -49,6 +58,8 @@ const SYSTEM = `Ты — помощник по рецептам. По запро
 - В uses[].ingredient пиши ИМЯ ровно так, как в groups, чтобы можно было сматчить.
 - Для КАЖДОГО ингредиента в uses указывай amount — количество, идущее на этом шаге (по умолчанию столько же, сколько в groups). Не оставляй amount пустым без причины; если ингредиент уже частично ушёл в прошлом шаге — ставь note "оставшееся".
 - Если у шага есть время готовки — заполни timerMinMinutes (и timerMaxMinutes для диапазона).
+- servings заполняй всегда, когда число порций понятно из рецепта или очевидно из количеств — от него считается КБЖУ на порцию.
+${NUTRITION_RULES}
 - Никакого текста вне JSON.`;
 
 export interface GenerateResult {

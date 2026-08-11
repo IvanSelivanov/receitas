@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { formatQuantity, scaleQuantity } from '@/lib/recipe/scale';
 import type { StoredRecipe, StoredGroup, StoredStep } from '@/lib/schema';
 import { PhotoUpload } from './PhotoUpload';
+import { NutritionFacts } from './Nutrition';
 
 function fmtNum(n: number): string {
   return String(Math.round(n * 100) / 100);
@@ -162,6 +163,7 @@ export function RecipeBody({ recipe }: { recipe: StoredRecipe }) {
     <div className="flex flex-col gap-6">
       {recipe.intro && <p className="text-neutral-600 dark:text-neutral-400">{recipe.intro}</p>}
       <IngredientList groups={recipe.groups} />
+      <NutritionFacts nutrition={recipe.nutrition} />
       <RecipeSteps steps={recipe.steps} />
       <RecipeTips tips={recipe.tips} />
     </div>

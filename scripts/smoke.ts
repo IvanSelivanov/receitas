@@ -3,6 +3,7 @@
 // Значения ключей НЕ печатаются.
 
 import { generateRecipes } from '../lib/gemini/generate';
+import { formatMacros, perServing } from '../lib/recipe/nutrition';
 
 async function checkGemini() {
   console.log('\n=== Gemini ===');
@@ -18,6 +19,13 @@ async function checkGemini() {
   console.log('   groups:', r.groups.length, '| steps:', r.steps.length, '| tips:', r.tips.length);
   const ing = r.groups[0]?.items[0];
   console.log('   1-й ингредиент:', ing?.name, '->', JSON.stringify(ing?.quantity));
+  const ps = r.nutrition ? perServing(r.nutrition) : null;
+  console.log(
+    '   КБЖУ:',
+    r.nutrition
+      ? `${ps ? `порция ${formatMacros(ps)}` : 'порции не указаны'} | вес блюда: ${r.nutrition.totalWeightG ?? '—'} г`
+      : '(модель не вернула — блок просто не покажется)',
+  );
   const withUses = r.steps.find((s) => s.uses.length > 0);
   if (withUses) {
     const u = withUses.uses[0];

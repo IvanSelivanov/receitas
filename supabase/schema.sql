@@ -12,13 +12,15 @@ create table if not exists public.recipes (
   groups      jsonb not null default '[]'::jsonb,  -- StoredGroup[]
   steps       jsonb not null default '[]'::jsonb,  -- StoredStep[]
   tips        jsonb not null default '[]'::jsonb,  -- string[]
+  nutrition   jsonb,                               -- StoredNutrition | null (см. nutrition.sql)
   image_url   text,
   last_opened_at timestamptz,          -- для сортировки «недавно открытые» (кросс-девайс)
   created_at  timestamptz not null default now()
 );
 
--- Для уже существующей БД: добавить колонку, если её ещё нет (идемпотентно).
+-- Для уже существующей БД: добавить колонки, если их ещё нет (идемпотентно).
 alter table public.recipes add column if not exists last_opened_at timestamptz;
+alter table public.recipes add column if not exists nutrition jsonb;
 
 create index if not exists recipes_user_created_idx
   on public.recipes (user_id, created_at desc);

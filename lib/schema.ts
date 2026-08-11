@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseQuantity, type Quantity } from './recipe/scale';
+import { makeNutrition, type StoredNutrition } from './recipe/nutrition';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Схема ответа Gemini (structured output).
@@ -37,6 +38,18 @@ export const GeminiStep = z.object({
   uses: z.array(GeminiStepUse).default([]),
 });
 
+// КБЖУ на ВСЁ блюдо целиком + вес готового блюда. На порцию и на 100 г делим
+// сами (см. lib/recipe/nutrition.ts). Все поля nullable: оценка необязательна и
+// её отсутствие не должно ронять рецепт.
+export const GeminiNutrition = z.object({
+  totalWeightG: z.number().nullable().default(null),
+  kcal: z.number().nullable().default(null),
+  protein: z.number().nullable().default(null),
+  fat: z.number().nullable().default(null),
+  carbs: z.number().nullable().default(null),
+  note: z.string().nullable().default(null),
+});
+
 export const GeminiRecipe = z.object({
   title: z.string().min(1),
   intro: z.string().nullable().default(null),
@@ -44,6 +57,9 @@ export const GeminiRecipe = z.object({
   groups: z.array(GeminiGroup).default([]),
   steps: z.array(GeminiStep).default([]),
   tips: z.array(z.string()).default([]),
+  // nullish, а не default(null): блок КБЖУ модель может не прислать вовсе, и это
+  // нормально — рецепт от этого не становится невалидным.
+  nutrition: GeminiNutrition.nullish(),
 });
 
 export const GeminiResponse = z.object({
@@ -111,6 +127,8 @@ export interface StoredRecipe {
   groups: StoredGroup[];
   steps: StoredStep[];
   tips: string[];
+  /** Оценка КБЖУ; null — не считали или модель не справилась. */
+  nutrition?: StoredNutrition | null;
 }
 
 function slugId(name: string, i: number): string {
@@ -171,5 +189,13 @@ export function normalizeRecipe(r: TGeminiRecipe): StoredRecipe {
     }),
   }));
 
-  return { title: r.title, intro: r.intro, servings: r.servings, groups, steps, tips: r.tips };
+  return {
+    title: r.title,
+    intro: r.intro,
+    servings: r.servings,
+    groups,
+    steps,
+    tips: r.tips,
+    nutrition: makeNutrition(r.nutrition, r.servings),
+  };
 }

@@ -1,4 +1,5 @@
 import { formatQuantity, scaleQuantity } from './scale';
+import { formatMacros, per100g, perServing } from './nutrition';
 import type { StoredRecipe } from '../schema';
 
 // Превращает рецепт в обычный текст для «Поделиться» (Telegram, WhatsApp,
@@ -22,6 +23,17 @@ export function recipeToText(recipe: StoredRecipe, factor = 1): string {
     }
   }
   if (ing.length) parts.push(`Ингредиенты:\n${ing.join('\n')}`);
+
+  // КБЖУ не масштабируется вместе с factor: ×2 — это вдвое больше таких же
+  // порций, а не вдвое калорийнее порция.
+  if (recipe.nutrition) {
+    const lines: string[] = [];
+    const serving = perServing(recipe.nutrition);
+    const hundred = per100g(recipe.nutrition);
+    if (serving) lines.push(`На порцию: ${formatMacros(serving)}`);
+    if (hundred) lines.push(`На 100 г: ${formatMacros(hundred)}`);
+    if (lines.length) parts.push(lines.join('\n'));
+  }
 
   if (recipe.steps.length) {
     const steps = recipe.steps.map((s, i) => {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { StoredRecipe, StoredGroup, StoredStep } from '../schema';
+import type { StoredNutrition } from './nutrition';
 
 // Рецепт как он лежит в БД (jsonb-документ, см. решение Eng Review).
 interface Row {
@@ -10,9 +11,17 @@ interface Row {
   groups: StoredGroup[];
   steps: StoredStep[];
   tips: string[];
+  nutrition: StoredNutrition | null;
   image_url: string | null;
   last_opened_at: string | null;
   created_at: string;
+}
+
+// Колонка nutrition появилась позже (supabase/nutrition.sql). Пока SQL не
+// применён, запись с ней падает — тем же приёмом, что и с last_opened_at,
+// повторяем операцию без неё, чтобы приложение продолжало работать.
+function isMissingNutritionColumn(error: { message?: string } | null): boolean {
+  return !!error?.message && /nutrition/i.test(error.message);
 }
 
 export interface RecipeRecord extends StoredRecipe {
@@ -38,6 +47,7 @@ function rowToRecord(row: Row): RecipeRecord {
     groups: row.groups ?? [],
     steps: row.steps ?? [],
     tips: row.tips ?? [],
+    nutrition: row.nutrition ?? null,
     imageUrl: row.image_url,
     createdAt: row.created_at,
   };
@@ -100,7 +110,7 @@ export async function saveRecipes(
   userId: string,
   recipes: StoredRecipe[],
 ): Promise<string[]> {
-  const rows = recipes.map((r) => ({
+  const bare = recipes.map((r) => ({
     user_id: userId,
     title: r.title,
     intro: r.intro,
@@ -109,9 +119,16 @@ export async function saveRecipes(
     steps: r.steps,
     tips: r.tips,
   }));
+  const rows = bare.map((row, i) => ({ ...row, nutrition: recipes[i].nutrition ?? null }));
+
   const { data, error } = await sb.from('recipes').insert(rows).select('id');
-  if (error) throw error;
-  return (data ?? []).map((d) => d.id as string);
+  if (!error) return (data ?? []).map((d) => d.id as string);
+
+  // Колонки nutrition ещё нет — сохраняем рецепт без КБЖУ, а не теряем его.
+  if (!isMissingNutritionColumn(error)) throw error;
+  const retry = await sb.from('recipes').insert(bare).select('id');
+  if (retry.error) throw retry.error;
+  return (retry.data ?? []).map((d) => d.id as string);
 }
 
 /** Переименовывает рецепт. */
@@ -124,15 +141,36 @@ export async function setRecipeTitle(
   if (error) throw error;
 }
 
-/** Сохраняет отредактированный состав рецепта (ингредиенты + шаги). */
+/**
+ * Сохраняет отредактированный состав рецепта (ингредиенты + шаги).
+ * Сбрасывает КБЖУ: после правки ингредиентов старая оценка врёт, а показывать
+ * неверные цифры хуже, чем не показывать никаких — пользователь пересчитает.
+ */
 export async function setRecipeContent(
   sb: SupabaseClient,
   id: string,
   groups: StoredGroup[],
   steps: StoredStep[],
 ): Promise<void> {
-  const { error } = await sb.from('recipes').update({ groups, steps }).eq('id', id);
-  if (error) throw error;
+  const { error } = await sb.from('recipes').update({ groups, steps, nutrition: null }).eq('id', id);
+  if (!error) return;
+  if (!isMissingNutritionColumn(error)) throw error;
+  const retry = await sb.from('recipes').update({ groups, steps }).eq('id', id);
+  if (retry.error) throw retry.error;
+}
+
+/** Записывает рассчитанное КБЖУ. */
+export async function setRecipeNutrition(
+  sb: SupabaseClient,
+  id: string,
+  nutrition: StoredNutrition | null,
+): Promise<void> {
+  const { error } = await sb.from('recipes').update({ nutrition }).eq('id', id);
+  if (error) {
+    throw isMissingNutritionColumn(error)
+      ? new Error('Колонка nutrition не создана — примени supabase/nutrition.sql')
+      : error;
+  }
 }
 
 /** Ставит главное фото рецепта. */
