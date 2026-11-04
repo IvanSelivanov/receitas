@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { MODEL, withRetry } from './client';
+import { generateWithFallback } from './client';
 
 // Вопрос-ответ по конкретному рецепту: замены ингредиентов, уточнения по технике,
 // таймингу, температуре. В отличие от генерации — обычный текстовый ответ (без
@@ -47,17 +47,13 @@ export async function askAboutRecipe(
   ];
 
   try {
-    const res = await withRetry(() =>
-      ai.models.generateContent({
-        model: MODEL,
-        contents,
-        config: {
-          systemInstruction: `${SYSTEM}\n\nРецепт:\n${recipeContext}`,
-          thinkingConfig: { thinkingBudget: 0 },
-          maxOutputTokens: 1024,
-        },
-      }),
-    );
+    const { res } = await generateWithFallback(ai, {
+      contents,
+      config: {
+        systemInstruction: `${SYSTEM}\n\nРецепт:\n${recipeContext}`,
+        maxOutputTokens: 1024,
+      },
+    });
     const text = res.text?.trim();
     if (!text) {
       const reason =

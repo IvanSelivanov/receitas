@@ -1,6 +1,6 @@
 import { GoogleGenAI, createUserContent, createPartFromBase64 } from '@google/genai';
 import { GeminiResponse, normalizeRecipe, stripFence, normalizeEnvelope, type StoredRecipe } from '../schema';
-import { MODEL, withRetry } from './client';
+import { generateWithFallback } from './client';
 import { NUTRITION_RULES } from './nutrition';
 
 // Приложенный файл (картинка или PDF) в base64.
@@ -126,31 +126,26 @@ export async function generateRecipes(
   let finishReason: string | undefined;
   let blockReason: string | undefined;
   try {
-    const res = await withRetry(() =>
-      ai.models.generateContent({
-        model: MODEL,
-        contents,
-        config: {
-          systemInstruction: SYSTEM,
-          responseMimeType: 'application/json',
-          // URL context — только когда в запросе есть ссылка (см. hasUrl выше).
-          ...(hasUrl ? { tools: [{ urlContext: {} }] } : {}),
-          // «Другой вариант» — поднимаем температуру для большего разнообразия.
-          ...(avoid.length ? { temperature: 1.2 } : {}),
-          // Размышления (thinking) плавают по длине и съедают бюджет вывода —
-          // это причина случайной обрезки JSON. Для структурной генерации они
-          // не нужны: выключаем и отдаём весь бюджет ответу.
-          thinkingConfig: { thinkingBudget: 0 },
-          maxOutputTokens: 8192,
-        },
-      }),
-    );
+    const { res, model } = await generateWithFallback(ai, {
+      contents,
+      config: {
+        systemInstruction: SYSTEM,
+        responseMimeType: 'application/json',
+        // URL context — только когда в запросе есть ссылка (см. hasUrl выше).
+        ...(hasUrl ? { tools: [{ urlContext: {} }] } : {}),
+        // «Другой вариант» — поднимаем температуру для большего разнообразия.
+        ...(avoid.length ? { temperature: 1.2 } : {}),
+        // Размышления (thinking) выключает generateWithFallback — под конкретную
+        // модель: иначе они съедают бюджет вывода и JSON обрезается.
+        maxOutputTokens: 8192,
+      },
+    });
     text = res.text;
     finishReason = res.candidates?.[0]?.finishReason;
     blockReason = res.promptFeedback?.blockReason;
     if (!text) {
       console.error('Gemini empty response:', {
-        model: MODEL,
+        model,
         finishReason,
         blockReason,
         candidates: res.candidates?.length,

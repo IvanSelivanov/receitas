@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { MODEL, withRetry } from './client';
+import { generateWithFallback } from './client';
 import { GeminiNutrition, stripFence } from '../schema';
 import { makeNutrition, type StoredNutrition } from '../recipe/nutrition';
 
@@ -41,18 +41,14 @@ export async function estimateNutrition(
 
   let text: string | undefined;
   try {
-    const res = await withRetry(() =>
-      ai.models.generateContent({
-        model: MODEL,
-        contents: recipeContext,
-        config: {
-          systemInstruction: SYSTEM,
-          responseMimeType: 'application/json',
-          thinkingConfig: { thinkingBudget: 0 },
-          maxOutputTokens: 512,
-        },
-      }),
-    );
+    const { res } = await generateWithFallback(ai, {
+      contents: recipeContext,
+      config: {
+        systemInstruction: SYSTEM,
+        responseMimeType: 'application/json',
+        maxOutputTokens: 512,
+      },
+    });
     text = res.text?.trim();
     if (!text) {
       const reason =
