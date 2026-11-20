@@ -8,11 +8,11 @@ import {
 
 // Общее для всех вызовов Gemini: список моделей и фолбэк между ними.
 //
-// Основная — Flash Lite 3.1: 500 запросов/сутки на бесплатном тарифе, быстрая.
-// Но в пики она отвечает 503 «high demand». Тогда сразу (без паузы) идём в
-// следующую модель списка — у неё своя мощность и своя квота.
-const PRIMARY = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-const FALLBACKS = (process.env.GEMINI_FALLBACK_MODELS ?? 'gemini-3.5-flash-lite')
+// Основная — Flash Lite 3.5, запасная — 3.1. В пики модель отвечает 503
+// «high demand» — тогда сразу (без паузы) идём в следующую модель списка:
+// у неё своя мощность и своя квота (поэтому и на 429 тоже).
+const PRIMARY = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+const FALLBACKS = (process.env.GEMINI_FALLBACK_MODELS ?? 'gemini-3.1-flash-lite')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);

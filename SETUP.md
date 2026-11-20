@@ -56,8 +56,10 @@ npm install
 4. Нажми **Copy** и сохрани его временно в блокнот. Он выглядит как длинная
    строка букв и цифр.
 
-> Бесплатный тариф модели `gemini-3.1-flash-lite` — **500 запросов в сутки**.
-> Для личного использования с запасом. Платить не нужно.
+> Основная модель — `gemini-3.5-flash-lite`, запасная — `gemini-3.1-flash-lite`
+> (у неё **500 запросов в сутки** на бесплатном тарифе). Квоты у моделей
+> раздельные, так что для личного использования с запасом. Платить не нужно.
+> Точные лимиты своего ключа смотри в AI Studio → Rate limits.
 
 ---
 
@@ -151,7 +153,7 @@ Supabase — это база данных, вход по email и хранили
 ```env
 # из Шага 3
 GEMINI_API_KEY=вставь_сюда_ключ_gemini
-GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_MODEL=gemini-3.5-flash-lite
 
 # из Шага 5a — без /rest/v1/ на конце!
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
@@ -167,7 +169,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 | Строка в `.env.local` | Что вставить | Откуда (шаг) |
 |---|---|---|
 | `GEMINI_API_KEY` | ключ Gemini | Шаг 3 (aistudio.google.com) |
-| `GEMINI_MODEL` | `gemini-3.1-flash-lite` | оставь как есть |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | оставь как есть |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://…​.supabase.co` | Шаг 5a (Settings → Data API) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` | Шаг 5b (Settings → API Keys) |
 
@@ -220,11 +222,11 @@ npm run dev
 из Settings → API Keys (именно **Publishable**, не Secret).
 
 **Gemini FAIL, «quota» / 429**
-— исчерпан дневной лимит (500/сутки у flash-lite). Подожди до сброса (сутки).
+— исчерпан дневной лимит у всех моделей (основной и запасной). Подожди до сброса (сутки).
 
 **«Gemini сейчас перегружен» / 503 «high demand»**
 — при 503/429 приложение само сразу переключается на запасную модель
-(`GEMINI_FALLBACK_MODELS`, по умолчанию `gemini-3.5-flash-lite`). Сообщение
+(`GEMINI_FALLBACK_MODELS`, по умолчанию `gemini-3.1-flash-lite`). Сообщение
 появляется, только если заняты все модели — подожди минуту и повтори.
 
 **Вход: ссылка из письма ведёт «в никуда» / ошибка**
