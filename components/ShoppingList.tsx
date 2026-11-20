@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { getRecipesByIds } from '@/lib/recipe/db';
 import { buildShoppingList, type ShoppingItem } from '@/lib/recipe/shoppingList';
+import { useLocalStorage } from '@/lib/useLocalStorage';
 import { ShoppingListView } from './ShoppingListView';
 
 interface Cached {
@@ -17,60 +18,77 @@ interface Cached {
 //  2) мгновенно показывает сохранённую версию из localStorage,
 //  3) если сеть есть — пересобирает из Supabase и обновляет кэш.
 // В магазине без сети (или при переоткрытии) работает шаг 2.
+// Строка запроса — внешний стор без подписки: меняется только навигацией,
+// которая перемонтирует страницу. На сервере null (страница ещё «грузится»).
+// Читаем window.location, а не useSearchParams: офлайн service worker может
+// отдать закэшированную HTML-оболочку от другого набора ids.
+const noSubscribe = () => () => {};
+
+function parseCached(raw: string | null): Cached | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Cached;
+  } catch {
+    return null;
+  }
+}
+
 export function ShoppingList() {
-  const [data, setData] = useState<Cached | null>(null);
-  const [cacheKey, setCacheKey] = useState<string>('');
-  const [state, setState] = useState<'loading' | 'online' | 'offline' | 'empty'>('loading');
+  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => null);
+  const idList = useMemo(
+    () =>
+      (new URLSearchParams(search ?? '').get('ids') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .sort(),
+    [search],
+  );
+  const cacheKey = search === null ? '' : `shopping:${idList.join(',')}`;
+
+  // 1. Мгновенно из кэша (localStorage).
+  const [cachedRaw, setCachedRaw] = useLocalStorage(cacheKey || null);
+  const cached = useMemo(() => parseCached(cachedRaw), [cachedRaw]);
+
+  // 2. Обновление из сети (если доступна).
+  const [fresh, setFresh] = useState<Cached | null>(null);
+  const [net, setNet] = useState<'loading' | 'online' | 'failed'>('loading');
 
   useEffect(() => {
-    const ids = new URLSearchParams(window.location.search)
-      .get('ids');
-    const idList = (ids ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .sort();
-    const key = `shopping:${idList.join(',')}`;
-    setCacheKey(key);
-
-    // 1. Мгновенно из кэша.
-    let cached: Cached | null = null;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) cached = JSON.parse(raw) as Cached;
-    } catch {
-      /* ignore */
-    }
-    if (cached) {
-      setData(cached);
-      setState('offline');
-    }
-
-    // 2. Обновление из сети (если доступна).
+    if (search === null || idList.length === 0) return;
+    let cancelled = false;
     (async () => {
-      if (idList.length === 0) {
-        if (!cached) setState('empty');
-        return;
-      }
       try {
         const supabase = createClient();
         const recipes = await getRecipesByIds(supabase, idList);
-        const fresh: Cached = {
+        if (cancelled) return;
+        const next: Cached = {
           items: buildShoppingList(recipes),
           titles: recipes.map((r) => r.title),
         };
-        setData(fresh);
-        setState('online');
-        try {
-          localStorage.setItem(key, JSON.stringify(fresh));
-        } catch {
-          /* ignore */
-        }
+        setFresh(next);
+        setNet('online');
+        setCachedRaw(JSON.stringify(next));
       } catch {
-        setState(cached ? 'offline' : 'empty');
+        if (!cancelled) setNet('failed');
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [search, idList, setCachedRaw]);
+
+  const data = fresh ?? cached;
+  const state: 'loading' | 'online' | 'offline' | 'empty' =
+    search === null
+      ? 'loading'
+      : net === 'online'
+        ? 'online'
+        : cached
+          ? 'offline'
+          : idList.length === 0 || net === 'failed'
+            ? 'empty'
+            : 'loading';
 
   return (
     <main className="mx-auto max-w-2xl p-6">

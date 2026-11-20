@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocalStorage } from '@/lib/useLocalStorage';
 import { formatQuantity } from '@/lib/recipe/scale';
 import { parseVoiceCommand, speakableQuantity, expandForSpeech, type VoiceCommand } from '@/lib/voice';
 import type { StoredStep } from '@/lib/schema';
@@ -69,7 +70,9 @@ export function CookMode({
   const [extendMin, setExtendMin] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState('');
+  // Выбранный голос озвучки — предпочтение, живёт в localStorage.
+  const [storedVoice, setStoredVoice] = useLocalStorage('tts-voice');
+  const voiceURI = storedVoice ?? '';
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
   const firedRef = useRef(false);
@@ -166,12 +169,7 @@ export function CookMode({
     synth.speak(u);
   }
   function selectVoice(uri: string) {
-    setVoiceURI(uri);
-    try {
-      localStorage.setItem('tts-voice', uri);
-    } catch {
-      /* ignore */
-    }
+    setStoredVoice(uri);
     speak('Пример голоса', uri); // образец сразу новым голосом
   }
   function readStep(step: StoredStep) {
@@ -225,12 +223,6 @@ export function CookMode({
     load();
     synth.addEventListener?.('voiceschanged', load);
     const t = setTimeout(load, 300); // фолбэк на браузеры с задержкой
-    try {
-      const saved = localStorage.getItem('tts-voice');
-      if (saved) setVoiceURI(saved);
-    } catch {
-      /* ignore */
-    }
     return () => {
       synth.removeEventListener?.('voiceschanged', load);
       clearTimeout(t);
@@ -346,32 +338,36 @@ export function CookMode({
   const total = steps.length;
   const progress = total > 0 ? ((i + 1) / total) * 100 : 0;
 
-  // Диспетчер голосовых команд (обновляем каждый рендер, чтобы видеть свежие i/step).
-  dispatchRef.current = (cmd: VoiceCommand) => {
-    switch (cmd.type) {
-      case 'next':
-        go(i + 1);
-        break;
-      case 'prev':
-        go(i - 1);
-        break;
-      case 'read':
-        readStep(step);
-        break;
-      case 'ingredients':
-        readStepIngredients();
-        break;
-      case 'timer':
-        startTimer(cmd.minutes, `${step.label || `Шаг ${i + 1}`}: ${cmd.minutes} мин`);
-        break;
-      case 'stopTimer':
-        setTimer(null);
-        break;
-      case 'exit':
-        onExit();
-        break;
-    }
-  };
+  // Диспетчер голосовых команд. Переназначаем после каждого рендера (в
+  // layout-эффекте, не во время рендера), чтобы обработчик распознавания видел
+  // свежие i/step.
+  useLayoutEffect(() => {
+    dispatchRef.current = (cmd: VoiceCommand) => {
+      switch (cmd.type) {
+        case 'next':
+          go(i + 1);
+          break;
+        case 'prev':
+          go(i - 1);
+          break;
+        case 'read':
+          readStep(step);
+          break;
+        case 'ingredients':
+          readStepIngredients();
+          break;
+        case 'timer':
+          startTimer(cmd.minutes, `${step.label || `Шаг ${i + 1}`}: ${cmd.minutes} мин`);
+          break;
+        case 'stopTimer':
+          setTimer(null);
+          break;
+        case 'exit':
+          onExit();
+          break;
+      }
+    };
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-neutral-950">

@@ -1,7 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useLocalStorage } from '@/lib/useLocalStorage';
 import type { ShoppingItem } from '@/lib/recipe/shoppingList';
+
+function parseSet(raw: string | null): Set<string> {
+  if (!raw) return new Set();
+  try {
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
 
 // Список покупок с отметкой купленного. Купленные уезжают в конец. Если задан
 // storageKey — отметки сохраняются в localStorage (переживают перезагрузку,
@@ -13,41 +23,26 @@ export function ShoppingListView({
   items: ShoppingItem[];
   storageKey?: string;
 }) {
-  const [bought, setBought] = useState<Set<string>>(new Set());
+  // С storageKey отметки живут в localStorage (переживают перезагрузку, в т.ч.
+  // офлайн), без него — только в памяти компонента.
+  const [stored, setStored] = useLocalStorage(storageKey ? `${storageKey}:bought` : null);
+  const [local, setLocal] = useState<Set<string>>(() => new Set());
+  const bought = useMemo(() => (storageKey ? parseSet(stored) : local), [storageKey, stored, local]);
 
-  // Загружаем сохранённые отметки после монтирования (без SSR-рассинхрона).
-  useEffect(() => {
-    if (!storageKey) return;
-    try {
-      const raw = localStorage.getItem(`${storageKey}:bought`);
-      if (raw) setBought(new Set(JSON.parse(raw) as string[]));
-    } catch {
-      /* ignore */
-    }
-  }, [storageKey]);
-
-  function persist(next: Set<string>) {
-    if (!storageKey) return;
-    try {
-      localStorage.setItem(`${storageKey}:bought`, JSON.stringify([...next]));
-    } catch {
-      /* ignore */
-    }
+  function update(next: Set<string>) {
+    if (storageKey) setStored(JSON.stringify([...next]));
+    else setLocal(next);
   }
 
   function toggle(name: string) {
-    setBought((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      persist(next);
-      return next;
-    });
+    const next = new Set(bought);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    update(next);
   }
 
   function clearAll() {
-    setBought(new Set());
-    persist(new Set());
+    update(new Set());
   }
 
   if (items.length === 0) {

@@ -1,13 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { assignCategoryToRecipes, type Category } from '@/lib/recipe/categories';
 import type { RecipeListItem } from '@/lib/recipe/db';
+import { useLocalStorage } from '@/lib/useLocalStorage';
 
 type Sort = 'new' | 'old' | 'az' | 'recent';
 const SORT_KEY = 'recipe-sort';
+
+function isSort(s: string | null): s is Sort {
+  return s === 'new' || s === 'old' || s === 'az' || s === 'recent';
+}
 
 // Виртуальная категория: рецепты, которым не назначена ни одна категория.
 const UNCATEGORIZED = '__uncat__';
@@ -30,27 +35,14 @@ export function RecipeList({
   const [picking, setPicking] = useState(false);
   const [busyCat, setBusyCat] = useState<string | null>(null);
   const [toast, setToast] = useState('');
-  const [sort, setSort] = useState<Sort>('new');
+  // Сортировка — UI-предпочтение, живёт в localStorage.
+  const [storedSort, setStoredSort] = useLocalStorage(SORT_KEY);
+  const sort: Sort = isSort(storedSort) ? storedSort : 'new';
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Загружаем сохранённую сортировку (это UI-предпочтение, локально — ок).
-  useEffect(() => {
-    try {
-      const s = localStorage.getItem(SORT_KEY);
-      if (s === 'new' || s === 'old' || s === 'az' || s === 'recent') setSort(s);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   function changeSort(s: Sort) {
-    setSort(s);
-    try {
-      localStorage.setItem(SORT_KEY, s);
-    } catch {
-      /* ignore */
-    }
+    setStoredSort(s);
   }
 
   function toggle(id: string) {
