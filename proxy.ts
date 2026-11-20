@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Обновляет сессию Supabase на каждый запрос (иначе токен протухает и
-// getUser() на сервере возвращает null). Паттерн из доки @supabase/ssr.
+// проверка сессии на сервере возвращает null). Паттерн из доки @supabase/ssr.
 // В Next 16 это "proxy" (бывший middleware).
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -24,7 +24,26 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  // getClaims, а не getUser: подпись JWT проверяется локально по JWKS, без
+  // запроса в Supabase Auth на каждый запрос (их тут десятки — страницы,
+  // RSC-префетчи, API). Протухший токен getClaims обновит так же, как getUser.
+  const { data, error } = await supabase.auth.getClaims();
+
+  // Уже вошёл, а открыл /login — сразу на главную. Ярлык на главном экране
+  // Android (у сайта нет манифеста) открывает ту страницу, с которой его
+  // добавили; добавленный со страницы входа каждый раз показывал форму,
+  // хотя сессия жива. Куки обновлённой сессии переносим в редирект.
+  if (data?.claims.sub && request.nextUrl.pathname === '/login') {
+    const redirect = NextResponse.redirect(new URL('/', request.url));
+    response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+    return redirect;
+  }
+
+  // «Нет сессии» — норма для /login. Остальное (например, refresh token уже
+  // использован — сессию отозвали) пишем в лог: это и есть «слетела авторизация».
+  if (error && error.name !== 'AuthSessionMissingError') {
+    console.warn('[auth] proxy:', error.name, error.code ?? '', error.message, request.nextUrl.pathname);
+  }
   return response;
 }
 

@@ -119,15 +119,15 @@ export default function GeneratePage() {
     setError('');
     try {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      // getClaims проверяет JWT локально, без похода в Supabase Auth.
+      const { data } = await supabase.auth.getClaims();
+      const userId = data?.claims.sub;
+      if (!userId) {
         router.push('/login');
         return;
       }
       const chosen = recipes.filter((_, i) => selected.has(i));
-      await saveRecipes(supabase, user.id, chosen);
+      await saveRecipes(supabase, userId, chosen);
       router.push('/');
       router.refresh();
     } catch (e) {

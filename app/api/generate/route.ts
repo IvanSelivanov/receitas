@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getUserId } from '@/lib/supabase/server';
 import { generateRecipes, type Media } from '@/lib/gemini/generate';
 
 // Лимит на base64 файла (~4 МБ), чтобы уложиться в лимит тела запроса Vercel.
@@ -27,14 +27,12 @@ function rateLimited(userId: string): boolean {
 export async function POST(request: NextRequest) {
   // Auth-gate: сессия проверяется на сервере ДО вызова Gemini.
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const userId = await getUserId(supabase);
+  if (!userId) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
-  if (rateLimited(user.id)) {
+  if (rateLimited(userId)) {
     return NextResponse.json({ error: 'Слишком часто. Попробуй позже.' }, { status: 429 });
   }
 

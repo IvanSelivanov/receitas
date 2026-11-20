@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getUserId } from '@/lib/supabase/server';
 import { getRecipe } from '@/lib/recipe/db';
 import { recipeToText } from '@/lib/recipe/shareText';
 import { askAboutRecipe, type QAPair } from '@/lib/gemini/ask';
@@ -40,14 +40,12 @@ function parseHistory(raw: unknown): QAPair[] {
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const userId = await getUserId(supabase);
+  if (!userId) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
-  if (rateLimited(user.id)) {
+  if (rateLimited(userId)) {
     return NextResponse.json({ error: 'Слишком часто. Попробуй позже.' }, { status: 429 });
   }
 

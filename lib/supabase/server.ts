@@ -26,3 +26,14 @@ export async function createClient() {
     },
   );
 }
+
+// Id текущего пользователя или null. getClaims() проверяет подпись JWT локально
+// по JWKS проекта (ключи асимметричные, JWKS кэшируется в памяти на 10 минут),
+// а getUser() на каждый вызов ходил в Supabase Auth по сети. Если токен
+// протух, getClaims сам обновит сессию (как и getUser).
+export async function getUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string | null> {
+  const { data } = await supabase.auth.getClaims();
+  return data?.claims.sub ?? null;
+}

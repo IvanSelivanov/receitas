@@ -1,16 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getUserId } from '@/lib/supabase/server';
 import { listRecipes } from '@/lib/recipe/db';
 import { listCategories, getRecipeCategoryLinks, type Category } from '@/lib/recipe/categories';
 import { RecipeList } from '@/components/RecipeList';
 
 export default async function Home() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const userId = await getUserId(supabase);
+  if (!userId) redirect('/login');
 
   const recipes = await listRecipes(supabase);
   // Категории необязательны: если SQL ещё не применён (нет таблиц) — не роняем

@@ -1,7 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+
+// Неудачный обмен кода на сессию (/auth/callback) возвращает сюда с
+// ?error=auth. Раньше форма молча показывалась заново, и было непонятно, что
+// вход не удался. useSearchParams — в отдельном компоненте под Suspense, чтобы
+// остальная страница по-прежнему пререндерилась.
+function AuthFailedNotice() {
+  const params = useSearchParams();
+  if (params.get('error') !== 'auth') return null;
+  return (
+    <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+      Не получилось войти. Ссылку из письма открывай в том же браузере, где её запрашивал, и
+      только один раз — или войди через Google.
+    </p>
+  );
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -50,6 +66,10 @@ export default function LoginPage() {
         </p>
       ) : (
         <div className="flex flex-col gap-4">
+          <Suspense fallback={null}>
+            <AuthFailedNotice />
+          </Suspense>
+
           <button
             type="button"
             onClick={signInGoogle}
